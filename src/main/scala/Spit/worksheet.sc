@@ -1,11 +1,9 @@
-import Spit.spit
-import Spit.spit.Card
+import Spit.spit.Dealer
+import akka.actor.{ActorSystem, Props}
 
-//val d = spit.createDeck()
+val system = ActorSystem("Spit_System")
+//create dealer
+val dealer = system.actorOf(Props[Dealer],"Dealer")
 
-//for (c <- d) println(spit.cardToString(c))
+println(dealer.path)
 
-val crd2: Card = (2, "S")
-val crd: Card = (2, "S")
-
-crd2 == crd

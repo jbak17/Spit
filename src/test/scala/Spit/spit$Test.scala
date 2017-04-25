@@ -1,13 +1,15 @@
 package Spit
 
-import Spit.spit.{Card, Deck}
+import Spit.spit._
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import org.scalatest.FunSuite
 import org.scalatest._
+import org.scalatest.concurrent.ScalaFutures
 
 /**
   * Created by jeva on 17/04/17.
   */
-class spit$Test extends FlatSpec {
+class spit$Test extends FlatSpec with ScalaFutures {
 
   //helper variables
   val deck: Deck = spit.createDeck()
@@ -32,6 +34,29 @@ class spit$Test extends FlatSpec {
 
   "A number card" should "have a string signature implying its standard usage" in {
     assertResult(true)(spit.cardToString(number_card) == "9A")
+  }
+
+  "A dealer" should "create two players upon instantiation" in {???
+    /*
+    val system = ActorSystem("Spit_System")
+    //create dealer
+    val dealer = system.actorOf(Props[Dealer],"Dealer")
+    //create players
+    dealer.context.actorSelection
+    */
+  }
+  "A dealer" should "create a deck of 52 cards when instantiated" in {
+    /*
+    val system = ActorSystem("Spit_System")
+    //create dealer
+    val dealer = system.actorOf(Props[Dealer],"Dealer")
+    //create players
+    deal
+    */
+  }
+
+  "A player" should "be able to receive a card from the dealer" in {
+    ???
   }
 
 }
