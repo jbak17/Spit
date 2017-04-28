@@ -1,9 +1,16 @@
-import Spit.spit.Dealer
-import akka.actor.{ActorSystem, Props}
+import Spit.spit
 
-val system = ActorSystem("Spit_System")
-//create dealer
-val dealer = system.actorOf(Props[Dealer],"Dealer")
+var outstring: String = " "
+println(outstring)
+outstring += "foo "
+outstring += "bar"
+println(outstring)
 
-println(dealer.path)
+val strList: List[String] = List("foo", "bar", "what")
+
+val newstring: String = strList.foldLeft("")(_ + " " + _)
+
+val str: String = "."*2
+var card = spit.cardToString(12, "D")
+
 
