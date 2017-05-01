@@ -1,6 +1,8 @@
 package Spit
 
-import Spit.spit._
+import Spit.Dealer.PlayerStuck
+import Spit.LayoutPile.RejectCard
+import Spit.spit.{Children, CurrentLayoutRequest, DealCards, PrintTablePiles, StartGame, _}
 import akka.actor.{Actor, ActorRef, Props}
 
 import scala.collection.mutable.ListBuffer
@@ -10,18 +12,22 @@ import scala.collection.mutable.ListBuffer
  dealer receives cards from players and adjudicates disputes
  dealer communicates with players
  */
-class Dealer extends Actor(){
-  println("Dealer created")
-  var pileOne: CardPile = ListBuffer()
-  var pileTwo: CardPile = ListBuffer()
+object Dealer {
 
-  //create players
-  val playerOne: ActorRef = context.actorOf(Props[Player], name = "PlayerOne")
-  val playerTwo: ActorRef = context.actorOf(Props[Player], name = "PlayerTwo")
+  case object Children
 
-  val players = List(playerOne, playerTwo)
-  val initialDeck: Deck = createDeck()
-  //sent cards to players
+  case object PrintTablePiles
+
+  case object DealCards
+
+  case object StartGame
+
+  case object PlayerStuck
+
+  case class CardFromPlayerPile(card: Card)
+
+  case object CurrentLayoutRequest
+
 
   //creates a shuffled deck of 52 playing cards
   def createDeck(): Deck = {
@@ -34,32 +40,48 @@ class Dealer extends Actor(){
     }
     scala.util.Random.shuffle(deck)
   }
+}
+
+class Dealer extends Actor(){
+  println("Dealer created")
+  var pileOne: CardPile = ListBuffer()
+  var pileTwo: CardPile = ListBuffer()
+
+  var playersStuck = 0 //used to ensure that the game doesn't deadlock
+  var noPlayersResponded = 0 //used to ensure that both players submit card after deadlock
+
+  //create players
+  val playerOne: ActorRef = context.actorOf(Props[Player], name = "PlayerOne")
+  val playerTwo: ActorRef = context.actorOf(Props[Player], name = "PlayerTwo")
+
+  val players = List(playerOne, playerTwo)
+  val initialDeck: Deck = Dealer.createDeck()
+  //sent cards to players
 
   def printDealerLayout(): Unit = println("Current table: " + cardToString(pileOne.head) + " " + cardToString(pileTwo.head))
 
   def cardReceived(card: Card, sender: ActorRef): Unit = {
-    val valid: List[Int] = List(card._1 -1, card._1 +1)
+    val valid: List[Int] = cardToValidNumber(card)
     if (valid.contains(pileOne.head._1)) {
       pileOne = card +: pileOne
     }
     else if (valid.contains(pileTwo.head._1)) {
       pileTwo = card +: pileTwo
     }
-    else sender ! RejectCard(card)
+    else sender ! RejectCard
 
     printDealerLayout()
     continue()
 
   }
 
-  def continue(): Unit = for(i <- players) i ! CurrentGameState(List(pileOne.head, pileTwo.head))
+  def continue(): Unit = {
+    for(i <- players) i ! CurrentGameState(List(pileOne.head, pileTwo.head))
+    printDealerLayout()
+  }
 
   def receive = {
     //printing
-    case Children => {
-      println(context.children)
-      for (i <- context.children) i ! Children
-    }
     case PrintTablePiles => printDealerLayout()
 
     // setup
@@ -70,14 +92,17 @@ class Dealer extends Actor(){
       playerOne ! DealCards(initialDeck.take(26))
       playerTwo ! DealCards(initialDeck.takeRight(26))
     }
-    case StartGame => {
-      for(i <- players) i ! CurrentGameState(List(pileOne.head, pileTwo.head))
-      printDealerLayout()
-    }
+    case StartGame => continue()
+
     //add card from player to central piles
     case CardFromPlayerPile(card) => {
       if (sender() == playerOne) pileOne += card
       else pileTwo += card
+      noPlayersResponded += 1
+      if (noPlayersResponded == 2){
+        noPlayersResponded = 0
+        continue()
+      }
     }
 
     //  game play
@@ -85,6 +110,15 @@ class Dealer extends Actor(){
     case SendSingleCard(card) => {
       val sndr: ActorRef = sender()
       cardReceived(card, sndr)
+    }
+    case PlayerStuck => {
+      playersStuck += 1
+      if (playersStuck == 2){
+        for(i <- players) i ! RequestCardFromPlayerDeck
+        playersStuck = 0
+      }
+      println("Player " + playerToString(sender()) + " stuck" )
+      sender() ! CurrentLayoutRequest
     }
 
   }

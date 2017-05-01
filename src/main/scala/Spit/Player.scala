@@ -2,6 +2,8 @@ package Spit
 
 import java.util.NoSuchElementException
 
+import Spit.Dealer.PlayerStuck
+import Spit.Player.{NoCardToPlay, PileEmpty}
 import Spit.spit._
 import akka.actor.{Actor, ActorRef, Props}
 
@@ -13,22 +15,19 @@ Players have their deck of remaining cards and
 five piles of cards representing the layout.
 Players communicate with the dealer and cardpiles
  */
+object Player {
+
+  case object DealCards
+  case object NoCardToPlay
+  case object PileEmpty
+  case object RequestCardFromPlayerDeck
+  case class SendMultipleCards(cards: CardPile)
+  case class DealCards(cards: Deck)
+  case class CurrentGameState(current: Deck)
+  case class CurrentPileResponse(pile: String)
+  case class NoCardAvailableFor(sndr: ActorRef)
 
 
-class Player extends Actor(){
-  println("Player created")
-
-  var playerStack: CardPile = ListBuffer()
-
-  val Pile1: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile1")
-  val Pile2: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile2")
-  val Pile3: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile3")
-  val Pile4: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile4")
-  val Pile5: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile5")
-
-  val layoutPiles = context.children
-
-  var currentLayout: ListBuffer[String] = ListBuffer()
 
   @tailrec
   final def buildLayout(cards: CardPile, piles: Iterable[ActorRef], index: Int = 0): Unit = {
@@ -45,20 +44,40 @@ class Player extends Actor(){
 
   }
 
-  /*
-  Prints current layout with top card showing and remaining
-  cards in stack represented by periods.
-  Eg, a starting layout: C3 C2. D9.. HK... SQ....
-  */
-  def printLayout(layout: List[String]): Unit = println("Current layout is: " + layout.sortBy(x => x.size).foldLeft("")((x,y) => x + y))
-
   def playableCards(cards: Deck): List[Int] = cards.map(card => cardToValidNumber(card)).flatten
+
+}
+
+class Player extends Actor(){
+  println("Player created")
+
+  var playerStack: CardPile = ListBuffer()
+
+  val Pile1: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile1")
+  val Pile2: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile2")
+  val Pile3: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile3")
+  val Pile4: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile4")
+  val Pile5: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile5")
+
+  var layoutPiles = context.children
+
+  var pilesWithNoCardToPlay: Int = 0
+  var emptyPiles: Int = 0
+
+  var currentLayout: ListBuffer[String] = ListBuffer()
+
+  /*
+Prints current layout with top card showing and remaining
+cards in stack represented by periods.
+Eg, a starting layout: C3 C2. D9.. HK... SQ....
+*/
+  def printLayout(layout: List[String]): Unit = println("Current layout for " + playerToString(self) + " is: " + layout.sortBy(x => x.size).foldLeft("")((x,y) => x + y))
 
   def receive = {
     //setup
     case DealCards(cards) => {
       playerStack ++= cards
-      buildLayout(playerStack, layoutPiles)
+      Player.buildLayout(playerStack, layoutPiles)
       playerStack = playerStack.takeRight(playerStack.size - 15)
       sender() ! CardFromPlayerPile(playerStack.head)
       playerStack.remove(0)
@@ -68,10 +87,12 @@ class Player extends Actor(){
 
     //forwards to piles
     case CurrentLayoutRequest => for (pile <- layoutPiles) pile ! CurrentPileRequest
-    case CurrentGameState(cards) => for (pile <- layoutPiles) pile ! RequestCardFromLayoutPile(playableCards(cards))
+    case CurrentGameState(cards) => {
+      for (pile <- layoutPiles) pile ! RequestCardFromLayoutPile(Player.playableCards(cards))
+      pilesWithNoCardToPlay = 0
+    }
 
     //printing
-    case Children => println(context.children)
     case CurrentPileResponse(response: String) => {
 
       if (currentLayout.length < 4) {
@@ -82,6 +103,7 @@ class Player extends Actor(){
       {
         currentLayout += response
         printLayout(currentLayout.toList)
+        currentLayout = ListBuffer()
       }
       else println("Something has gone horribly wrong.")
     }
@@ -97,13 +119,35 @@ class Player extends Actor(){
       }
       //build new layout from deck
       else {
-        buildLayout(playerStack, layoutPiles)
+        Player.buildLayout(playerStack, layoutPiles)
         playerStack = playerStack.takeRight(playerStack.size - 15)
       }
       println("Player deck now has: " + playerStack.size)
     }
+    case NoCardToPlay => {
+      pilesWithNoCardToPlay +=1
+      if (pilesWithNoCardToPlay + emptyPiles == layoutPiles.size)
+        context.parent ! PlayerStuck
+    }
+    case PileEmpty => {
+      emptyPiles += 1
+      if (emptyPiles == 5){
+        println("Player " + playerToString(self) + " declares victory")
+        context.system.terminate()
+      }
+    }
+    case RequestCardFromPlayerDeck => {
+      if (playerStack.nonEmpty){
+        sender() ! CardFromPlayerPile(playerStack.head)
+        playerStack.remove(0)
+        println("Card sent from player deck")
+      }
+      else println("Player " + playerToString(self) + " deck empty.")
 
-  }
+    }
+    }
 
-//Player ends here
+
+
+  //Player ends here
 }

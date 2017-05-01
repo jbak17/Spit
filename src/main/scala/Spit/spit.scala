@@ -28,32 +28,29 @@ object spit extends App{
   case class DealCards(cards: Deck)
 
   //  console output
-  case object SignalChildren
-  case object PrintSignal
   case object CurrentLayoutRequest
   case object CurrentPileRequest
-  case object AskName
   case object PrintTablePiles
 
   //  * * * GAME PLAY *  * *
 
-  case object NotifyNoStack
-  /*
+    /*
   Send message to players with current deck
   Players can return card or inform guardian they are stuck
    */
   case object StartGame
-  case object RequestCard //ask actor to send card
+  case object NotifyNoStack
+
+  case object RequestCardFromPlayerDeck //dealer ask player to send card to pile
   case class CurrentGameState(current: Deck)
   case class RequestCardFromLayoutPile(validCards: List[Int])
   case class SendSingleCard(card: Card)
   case class CardFromPlayerPile(card: Card) //is sorted by dealer onto pile
   case class SendMultipleCards(cards: CardPile)
-  case class RejectCard(card: Card)
+
 
 
   //responses
-  case class NameResponse(name: String)
   case class CardResponse(card: Card)
   case class CurrentPileResponse(pile: String)
   case class CurrentLayoutResponse(layout: String)
@@ -94,6 +91,6 @@ object spit extends App{
   dealer ! StartGame
 
 
-  Thread.sleep(6000) //giving 6s for all actors to finish work
-  system.terminate()
+  //Thread.sleep(6000) //giving 6s for all actors to finish work
+  //system.terminate()
 }
