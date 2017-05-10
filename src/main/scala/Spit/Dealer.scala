@@ -1,7 +1,7 @@
 package Spit
 
 import Spit.Dealer.PlayerStuck
-import Spit.LayoutPile.RejectCard
+import Spit.LayoutPile.{AcceptCard, RejectCard}
 import Spit.spit.{Children, CurrentLayoutRequest, DealCards, PrintTablePiles, StartGame, _}
 import akka.actor.{Actor, ActorRef, Props}
 
@@ -54,19 +54,28 @@ class Dealer extends Actor(){
   val playerOne: ActorRef = context.actorOf(Props[Player], name = "PlayerOne")
   val playerTwo: ActorRef = context.actorOf(Props[Player], name = "PlayerTwo")
 
+  //create list of players and deck
   val players = List(playerOne, playerTwo)
   val initialDeck: Deck = Dealer.createDeck()
-  //sent cards to players
 
+  //print current dealer layout to console
   def printDealerLayout(): Unit = println("Current table: " + cardToString(pileOne.head) + " " + cardToString(pileTwo.head))
 
+  /*
+  Receive card from layout. If card is valid it is added to the stack and a
+  receipt is sent to the player. If card is rejected it is returned to the player.
+  After each card transaction the dealer's layout is printed and current status
+  of the layout is sent to the players.
+   */
   def cardReceived(card: Card, sender: ActorRef): Unit = {
     val valid: List[Int] = cardToValidNumber(card)
     if (valid.contains(pileOne.head._1)) {
       pileOne = card +: pileOne
+      sender ! AcceptCard
     }
     else if (valid.contains(pileTwo.head._1)) {
       pileTwo = card +: pileTwo
+      sender ! AcceptCard
     }
     else sender ! RejectCard
 
@@ -75,29 +84,52 @@ class Dealer extends Actor(){
 
   }
 
+  /*
+  Sends current layout to Players and prints dealer layout.
+  Players need to handle whether they are still stuck or not.
+   */
   def continue(): Unit = {
     for(i <- players) i ! CurrentGameState(List(pileOne.head, pileTwo.head))
     printDealerLayout()
+    playersStuck = 0
   }
 
   def receive = {
     //printing
     case PrintTablePiles => printDealerLayout()
 
-    // setup
+    /*
+      **********   SET UP  *********
+      */
 
-    //sends cards to children, children send card back for initial pile
+    /*
+    Sends cards to children, children send card back for initial pile
+     */
     case DealCards => {
       println("Dealing...")
       playerOne ! DealCards(initialDeck.take(26))
       playerTwo ! DealCards(initialDeck.takeRight(26))
     }
+
+    /*
+    Starts the game: should only be used once by the inbox.
+     */
     case StartGame => continue()
 
-    //add card from player to central piles
+
+
+    /*
+      **********   GAME PLAY  *********
+      */
+    /*
+    Add card from player to central piles. Doesn't proceed until both players have
+    responded. Once players have responded game continues.
+
+    Used for cases when neither player can proceed (deadlock)
+     */
     case CardFromPlayerPile(card) => {
-      if (sender() == playerOne) pileOne += card
-      else pileTwo += card
+      if (sender() == playerOne) pileOne.+=:(card)
+      else pileTwo.+=:(card)
       noPlayersResponded += 1
       if (noPlayersResponded == 2){
         noPlayersResponded = 0
@@ -105,12 +137,26 @@ class Dealer extends Actor(){
       }
     }
 
-    //  game play
+    /*
+    Request from each player the current layout
+    Used for preparing console output.
+     */
     case CurrentLayoutRequest => for(i <- players) i ! CurrentLayoutRequest
+
+    /*
+    Used to receive a single card from a player during gameplay.
+    The cardReceived function will determine how to respond to card with
+    either accept/reject.
+     */
     case SendSingleCard(card) => {
       val sndr: ActorRef = sender()
       cardReceived(card, sndr)
     }
+
+    /*
+    Player reports to dealer that they are stuck.
+    If both players are stuck the dealer requests a new card from each.
+     */
     case PlayerStuck => {
       playersStuck += 1
       if (playersStuck == 2){

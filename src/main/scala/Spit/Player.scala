@@ -3,7 +3,8 @@ package Spit
 import java.util.NoSuchElementException
 
 import Spit.Dealer.PlayerStuck
-import Spit.Player.{NoCardToPlay, PileEmpty}
+import Spit.LayoutPile.SendCardToPile
+import Spit.Player.{CurrentPileResponse, NoCardToPlay, PileEmpty}
 import Spit.spit._
 import akka.actor.{Actor, ActorRef, Props}
 
@@ -24,7 +25,7 @@ object Player {
   case class SendMultipleCards(cards: CardPile)
   case class DealCards(cards: Deck)
   case class CurrentGameState(current: Deck)
-  case class CurrentPileResponse(pile: String)
+  case class CurrentPileResponse(pile: String, size: Int)
   case class NoCardAvailableFor(sndr: ActorRef)
 
 
@@ -53,6 +54,9 @@ class Player extends Actor(){
 
   var playerStack: CardPile = ListBuffer()
 
+  /*
+  5 layout piles are actors that can deal directly with the dealer
+   */
   val Pile1: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile1")
   val Pile2: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile2")
   val Pile3: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile3")
@@ -60,6 +64,11 @@ class Player extends Actor(){
   val Pile5: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile5")
 
   var layoutPiles = context.children
+  /*
+   list of actors and size of their current pile.
+   Used to move cards between piles.
+    */
+  var layoutStatus: List[(ActorRef, Int)] = layoutPiles.zip(1 to 5).toList
 
   var pilesWithNoCardToPlay: Int = 0
   var emptyPiles: Int = 0
@@ -87,14 +96,20 @@ Eg, a starting layout: C3 C2. D9.. HK... SQ....
 
     //forwards to piles
     case CurrentLayoutRequest => for (pile <- layoutPiles) pile ! CurrentPileRequest
+
     case CurrentGameState(cards) => {
       for (pile <- layoutPiles) pile ! RequestCardFromLayoutPile(Player.playableCards(cards))
       pilesWithNoCardToPlay = 0
     }
 
-    //printing
-    case CurrentPileResponse(response: String) => {
+    /*
+    Processes responses from piles regarding the current state of their
+    respective piles.
+     */
+    case CurrentPileResponse(response: String, size: Int) => {
 
+      val actorIndex = layoutStatus.indexWhere(x => x._1 == sender())
+      layoutStatus.updated(actorIndex, (sender(), size))
       if (currentLayout.length < 4) {
         currentLayout += response
         //println(currentLayout)
@@ -108,7 +123,10 @@ Eg, a starting layout: C3 C2. D9.. HK... SQ....
       else println("Something has gone horribly wrong.")
     }
 
-    //card movements
+    /*
+    Cards received from dealer. Sends cards to piles
+    to build layout, and places remaining cards on the stack.
+     */
     case SendMultipleCards(cards) => {
       playerStack = cards
       println("player deck size: " + playerStack.size)
@@ -124,11 +142,21 @@ Eg, a starting layout: C3 C2. D9.. HK... SQ....
       }
       println("Player deck now has: " + playerStack.size)
     }
+
+      /*
+      Inform dealer that the player cannot play any cards with the current
+      dealer layout.
+      Used to prevent deadlock
+       */
     case NoCardToPlay => {
+      //sends request for card to be sent from largest pile
+      layoutStatus.sortWith(_._2 > _._2).head._1 ! SendCardToPile(sender())
+
       pilesWithNoCardToPlay +=1
       if (pilesWithNoCardToPlay + emptyPiles == layoutPiles.size)
         context.parent ! PlayerStuck
     }
+
     case PileEmpty => {
       emptyPiles += 1
       if (emptyPiles == 5){
@@ -136,16 +164,20 @@ Eg, a starting layout: C3 C2. D9.. HK... SQ....
         context.system.terminate()
       }
     }
+
+    /*
+    Send card to dealer from stack in reponse to dealer request
+     */
     case RequestCardFromPlayerDeck => {
       if (playerStack.nonEmpty){
         sender() ! CardFromPlayerPile(playerStack.head)
-        playerStack.remove(0)
+        playerStack = playerStack.tail
         println("Card sent from player deck")
       }
       else println("Player " + playerToString(self) + " deck empty.")
 
     }
-    }
+  }//end receive
 
 
 

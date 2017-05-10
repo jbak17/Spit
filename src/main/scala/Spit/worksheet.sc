@@ -1,16 +1,8 @@
-import Spit.spit
+val t1 = (1 , 'a')
+val t2 = (2 , 'b')
+val t3 = (3 , 'c')
+val t4 = (4 , 'd')
 
-var outstring: String = " "
-println(outstring)
-outstring += "foo "
-outstring += "bar"
-println(outstring)
+val lst: List[(Int, Char)] = List(t1, t2, t3, t4)
 
-val strList: List[String] = List("foo", "bar", "what")
-
-val newstring: String = strList.foldLeft("")(_ + " " + _)
-
-val str: String = "."*2
-var card = spit.cardToString(12, "D")
-
-
+lst.indexWhere(x => x._1 ==3)

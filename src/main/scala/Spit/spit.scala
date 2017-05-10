@@ -52,7 +52,7 @@ object spit extends App{
 
   //responses
   case class CardResponse(card: Card)
-  case class CurrentPileResponse(pile: String)
+  //case class CurrentPileResponse(pile: String)
   case class CurrentLayoutResponse(layout: String)
 
   //returns the string representation of a card in form

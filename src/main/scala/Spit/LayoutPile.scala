@@ -1,7 +1,7 @@
 package Spit
 
-import Spit.LayoutPile.{MoveBetweenPiles, RejectCard}
-import Spit.Player.{NoCardAvailableFor, NoCardToPlay, PileEmpty}
+import Spit.LayoutPile.{AcceptCard, MoveBetweenPiles, RejectCard, SendCardToPile}
+import Spit.Player.{CurrentPileResponse, NoCardAvailableFor, NoCardToPlay, PileEmpty}
 import Spit.spit._
 import akka.actor.SupervisorStrategy.Resume
 import akka.actor.{Actor, ActorRef, OneForOneStrategy, SupervisorStrategy}
@@ -17,7 +17,10 @@ The layout can notify the player if a pile is empty and request a card
 object LayoutPile {
 
   case object RejectCard
-  case class MoveBetweenPiles(card: Card, pile: ActorRef)
+  case object AcceptCard
+
+  case class MoveBetweenPiles(card: Card)
+  case class SendCardToPile(sndr: ActorRef)
 
 
 }
@@ -30,7 +33,7 @@ class LayoutPile extends Actor(){
   }
 
   var pile: mutable.ListBuffer[Card] = ListBuffer()
-  var cardLimbo: Card = _
+  var cardLimbo: Boolean = false
   var dead: Boolean = false
 
   // String representation of pile
@@ -42,16 +45,17 @@ class LayoutPile extends Actor(){
   /*
   Considers whether either of the cards on the table piles can be added to with the card on the top of this pile.
   If card exists send to dealer.
+  Card goes into limbo until dealer confirms acceptance.
+  If dealer rejects, card is added back to pile.
    */
   def gameStateResponse(cards: List[Int]) = {
 
-    if (pile.nonEmpty){
+    if (pile.nonEmpty & cardLimbo != true){
       if (cards.contains(pile.head._1))
       {
         dealer ! SendSingleCard(pile.head)
-        cardLimbo = pile.head
+        cardLimbo = true
         println("Layout from " + playerToString(context.parent) + " sent " + cardToString(pile.head) + " to dealer.")
-        pile = pile.tail
       }
       else context.parent ! NoCardToPlay
     }
@@ -66,7 +70,7 @@ class LayoutPile extends Actor(){
     //printing
     case CurrentPileRequest => {
       //println(currentPile())
-      sender() ! CurrentPileResponse(currentPile())
+      sender() ! CurrentPileResponse(currentPile(), pile.length)
     }
 
     //card movements
@@ -75,15 +79,35 @@ class LayoutPile extends Actor(){
       //println(currentPile())
     }
 
-    case MoveBetweenPiles(card, pileActor) => {
-      if (dead == false) pileActor ! SendSingleCard(pile.head)
-      else sender() ! NoCardAvailableFor(pileActor)
+    /*
+    Used to respond to request from player to provide a card to another pile
+     */
+    case SendCardToPile(sndr) => {
+      if (pile.length != 0) {
+        sndr ! MoveBetweenPiles(pile.head)
+        pile.remove(0)
+      }
+      else sender() ! NoCardAvailableFor(sndr)
     }
+
+    /*
+    Used for when a pile receives a card from another pile
+     */
+    case MoveBetweenPiles(card) => {
+      pile = pile :+ card
+    }
+
     // game play updates
     case RequestCardFromLayoutPile(cards) => gameStateResponse(cards)
+
     case RejectCard => {
-      println("Dealer rejected " + cardToString(cardLimbo))
-      pile = cardLimbo +: pile
+      println("Dealer rejected " + cardToString(pile.head))
+      cardLimbo = false
+
+    }
+    case AcceptCard =>{
+      if (pile.nonEmpty) pile = pile.tail
+      else context.parent ! PileEmpty
     }
 
   }
