@@ -25,7 +25,7 @@ object spit extends App{
   Player to deal with
    */
   case object AcceptCard //dealer accepts
-  case object RejectCard //dealer rejects
+  case class RejectCard(card: Card) //dealer rejects
   case class Table(deck: Deck) //current cards facing on table
   case object CurrentLayoutRequest //send string repr to dealer
   case object RequestCard //used by dealer to break deadlock/start hand
@@ -38,7 +38,7 @@ object spit extends App{
   case class CurrentLayoutResponse(layout: String) //player shows layout to dealer
   case object PlayerStuck //player with no card to play.
   case object DealCards //used to start game.
-
+  case object DeclaresVictory
   /*
   returns the string representation of a card in form
   "facevalue suit" without a space, eg. A clubs = AC
@@ -49,6 +49,7 @@ object spit extends App{
     case (12, _) => "Q" + card._2
     case (13, _) => "K" + card._2
     case (1, _) => "A" + card._2
+    case (0, _) => "X" //empty card for layout display.
     case (_, _) => card._1.toString + card._2
   }
 

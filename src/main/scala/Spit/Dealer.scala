@@ -64,6 +64,7 @@ class Dealer extends Actor() {
 
   var playersStuck: Int = 0 //used to ensure that the game doesn't deadlock
   var noPlayersResponded: Int = -1 //used to ensure that both players submit card after deadlock
+  var stringCache: List[String] = List() //used to cache layout responses for pretty printing
 
   /* ******************
     DEALER FUNCTIONS
@@ -82,6 +83,11 @@ class Dealer extends Actor() {
     for (p <- players) p ! RequestCard
   }
 
+  //Prints each element of cache and clears cache
+  def printCache(): Unit =
+    for (i <- stringCache) println(i)
+    stringCache = List()
+
     /*
   Prints current dealer and player layouts.
   Sends current layout to Players to see if they can play card.
@@ -89,12 +95,12 @@ class Dealer extends Actor() {
    */
   def resumeGame(): Unit = {
 
-    //val p1Layout: Future[String] = playerOne ? CurrentLayoutRequest
+    stringCache = DealerLayout() :: stringCache
     for(i <- players) {
       i ! CurrentLayoutRequest
+      Thread.sleep(200)
       i ! Table(List(pileOne.head, pileTwo.head))
     }
-    println(DealerLayout())
     playersStuck = 0
 
   }
@@ -135,8 +141,22 @@ class Dealer extends Actor() {
       //normal gameplay
       if (noPlayersResponded == -1) {
         //check validity
-
+        val valid: List[Int] = cardToValidNumber(card)
         //accept or reject
+        if (valid.contains(pileOne.head._1)) {
+          println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
+          pileOne = card :: pileOne
+          sender ! AcceptCard
+          resumeGame()
+        }
+        else if (valid.contains(pileTwo.head._1)) {
+          println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
+          pileTwo = card :: pileTwo
+          sender ! AcceptCard
+          resumeGame()
+        }
+        else sender ! RejectCard(card)
+
       }
       //dealer requested card to break deadlock
       else {
@@ -155,10 +175,24 @@ class Dealer extends Actor() {
     case Endgame => {}
 
     case CurrentLayoutResponse(response) => {
-      println(response)
+      stringCache = response :: stringCache
+      if (stringCache.size == 3) {
+        printCache()
+      }
     }
 
-    case PlayerStuck => {}
+    case PlayerStuck => {
+      println(playerToString(sender()) + " stuck.")
+      playersStuck += 1
+      if (playersStuck == 2){
+        requestLayoutCards()
+        playersStuck = 0
+      }
+    }
+
+    case DeclaresVictory => {
+      println(playerToString(sender()) + " declares Victory!!")
+    }
 
 
   }
@@ -225,18 +259,7 @@ class Dealer extends Actor() {
   of the layout is sent to the players.
    */
   def cardReceived(card: Card, sender: ActorRef): Unit = {
-    val valid: List[Int] = cardToValidNumber(card)
-    val parent: ActorSelection = context.actorSelection(sender.path.parent)
-    if (valid.contains(pileOne.head._1)) {
-      pileOne = card +: pileOne
-      sender ! AcceptCard
-    }
-    else if (valid.contains(pileTwo.head._1)) {
-      pileTwo = card +: pileTwo
-      sender ! AcceptCard
-      parent ! DealerAcceptedCard
-    }
-    else sender ! RejectCard
+
 
     printDealerLayout()
     continue()
