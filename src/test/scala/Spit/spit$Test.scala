@@ -22,7 +22,7 @@ import scala.util.Random
 class spit$Test extends FlatSpec with ScalaFutures {
 
   def createDeck(): Deck = {
-    val suits: List[Suit] = List("H", "S", "C", "D")
+    val suits: List[String] = List("H", "S", "C", "D")
     val deck: Deck = for (
       suit <- suits;
       number <- 1 to 13
@@ -36,6 +36,7 @@ class spit$Test extends FlatSpec with ScalaFutures {
   val deck: Deck = createDeck()
   val face_card: Card = (11, "S")
   val number_card: Card = (9, "A")
+  val pile2: CardPile = new CardPile(2)
 
   "A deck" should "have 52 cards" in {
     val deck: Deck = createDeck()
@@ -68,6 +69,34 @@ class spit$Test extends FlatSpec with ScalaFutures {
   "A card of value 13" should "have valid additions of 1 and 12" in {
     assertResult(List(12, 1))(spit.cardToValidNumber((13, "C")))
   }
+
+  "A pile " should " accept cards" in {
+    pile2.sendCard(face_card)
+    assert(pile2.isEmpty() == false)
+  }
+
+  "A pile " should "have a limit" in {
+    pile2.sendCard(face_card)
+    pile2.sendCard(number_card)
+    assert(pile2.isFull() == true)
+  }
+
+  "A pile " should "return a card" in {
+    pile2.sendCard(face_card)
+    pile2.sendCard(number_card)
+    val crd: Card = pile2.getCard()
+    assert(crd.isInstanceOf[Card] == true)
+  }
+
+  "A pile " should "return a card and have fewer cards afterwards" in {
+    pile2.sendCard(face_card)
+    pile2.sendCard(number_card)
+    val start = pile2.size()
+    val crd: Card = pile2.getCard()
+    val end = pile2.size()
+    assertResult(false)(start == end)
+  }
+
 
   /*
 

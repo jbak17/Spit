@@ -11,45 +11,33 @@ import scala.util.matching.Regex
 
 object spit extends App{
 
-  type Suit = String
-  type Card = (Int, Suit)
+  type Card = (Int, String)
   type Deck = List[Card] //initial deck
-  type CardPile = ListBuffer[Card]
 
   //  MESSAGES
 
-  //  hand set up
-  case object CreateChild
-  case object DealCards
-  case class DealCards(cards: Deck)
+  /*
+    All actors to recieve
+  */
+  case class SendCard(card: Card)
 
-  //  console output
-  case object CurrentLayoutRequest
-  case object CurrentPileRequest
-  case object PrintTablePiles
-
-  //  * * * GAME PLAY *  * *
-
-    /*
-  Send message to players with current deck
-  Players can return card or inform guardian they are stuck
+  /*
+  Player to deal with
    */
-  case object StartGame
-  case object NotifyNoStack
+  case object AcceptCard //dealer accepts
+  case object RejectCard //dealer rejects
+  case class Table(deck: Deck) //current cards facing on table
+  case object CurrentLayoutRequest //send string repr to dealer
+  case object RequestCard //used by dealer to break deadlock/start hand
+  case object BuildLayout //used to start hand.
 
-  case object RequestCardFromPlayerDeck //dealer ask player to send card to pile
-  case class CurrentGameState(current: Deck)
-  case class RequestCardFromLayoutPile(validCards: List[Int])
-  case class SendSingleCard(card: Card)
-  case class CardFromPlayerPileToDealerLayout(card: Card) //is sorted by dealer onto pile
-  case class SendMultipleCards(cards: CardPile)
-
-
-
-  //responses
-  case class CardResponse(card: Card)
-  //case class CurrentPileResponse(pile: String)
-  case class CurrentLayoutResponse(layout: String)
+  /*
+  Dealer to manage
+   */
+  case object Endgame //player declares non-full layout
+  case class CurrentLayoutResponse(layout: String) //player shows layout to dealer
+  case object PlayerStuck //player with no card to play.
+  case object DealCards //used to start game.
 
   /*
   returns the string representation of a card in form
@@ -86,10 +74,7 @@ object spit extends App{
   def initialiseGame(): Unit = {
     dealer ! DealCards
     Thread.sleep(500)
-    dealer ! StartGame
   }
-
-
 
    //     ACTOR SYSTEM SETUP
 

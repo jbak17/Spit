@@ -1,12 +1,12 @@
 package Spit
 
-import Spit.Dealer.{DeclaresVictory, PlayerStuck}
-import Spit.LayoutPile.{AcceptCard, RejectCard}
-import Spit.Player.DealerAcceptedCard
-import Spit.spit.{CurrentLayoutRequest, DealCards, PrintTablePiles, StartGame, _}
+import Spit.spit._
+import akka.actor.FSM.Failure
+import akka.actor.Status.Success
 import akka.actor.{Actor, ActorPath, ActorRef, ActorSelection, Props}
 import akka.pattern.ask
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Future
 
@@ -17,25 +17,10 @@ import scala.concurrent.Future
  */
 object Dealer {
 
-  //Request player layout: dealer -> player
-  case object PrintTablePiles
-  //send cards to player: dealer -> player
-  case object DealCards
-  //dealer signals commencement of game: dealer -> player
-  case object StartGame
-  //Player signals can't continue: player -> dealer
-  case object PlayerStuck
-  //Player sends card to dealer: player -> dealer
-  case class CardFromPlayerPile(card: Card)
-  //Dealer request layout from player: dealer -> player
-  case object CurrentLayoutRequest
-  //Player informs dealer of victory
-  case object DeclaresVictory
-
 
   //creates a shuffled deck of 52 playing cards
   def createDeck(): Deck = {
-    val suits: List[Suit] = List("H", "S", "C", "D")
+    val suits: List[String] = List("H", "S", "C", "D")
     val deck: Deck = for (
       suit <- suits;
       number <- 1 to 13
@@ -44,16 +29,26 @@ object Dealer {
     }
     scala.util.Random.shuffle(deck)
   }
+
+  @tailrec
+  def deal(cards: Deck, player: ActorRef):Unit = {
+    //true to let player know to expect more cards
+    if (cards.tail.nonEmpty) player ! SendCard(cards.head)
+    else {
+      player ! SendCard(cards.head)
+      player ! BuildLayout
+    }
+
+    if (cards.tail.nonEmpty) deal(cards.tail, player)
+  }
 }
 
-class Dealer extends Actor(){
+class Dealer extends Actor() {
   println("Dealer created")
-  var pileOne: CardPile = ListBuffer()
-  var pileTwo: CardPile = ListBuffer()
 
-  var playersStuck = 0 //used to ensure that the game doesn't deadlock
-  var noPlayersResponded = 0 //used to ensure that both players submit card after deadlock
-
+  /*
+  Initialisation
+   */
   //create players
   val playerOne: ActorRef = context.actorOf(Props[Player], name = "PlayerOne")
   val playerTwo: ActorRef = context.actorOf(Props[Player], name = "PlayerTwo")
@@ -62,79 +57,120 @@ class Dealer extends Actor(){
   val players = List(playerOne, playerTwo)
   val initialDeck: Deck = Dealer.createDeck()
 
-  //print current dealer layout to console
-  def printDealerLayout(): Unit = println("Current table: " + cardToString(pileOne.head) + " " + cardToString(pileTwo.head))
+  /* gameplay variables */
+
+  var pileOne: Deck = List()
+  var pileTwo: Deck = List()
+
+  var playersStuck: Int = 0 //used to ensure that the game doesn't deadlock
+  var noPlayersResponded: Int = -1 //used to ensure that both players submit card after deadlock
+
+  /* ******************
+    DEALER FUNCTIONS
+  ********************* */
+
+  //String repr of dealer layout
+  def DealerLayout(): String = "Current table: " + cardToString(pileOne.head) + " " + cardToString(pileTwo.head)
 
   /*
-  Receive card from layout. If card is valid it is added to the stack and a
-  receipt is sent to the player. If card is rejected it is returned to the player.
-  After each card transaction the dealer's layout is printed and current status
-  of the layout is sent to the players.
+  Requests a card from each player to be added to the layout
+  Start game and breaks deadlocks
    */
-  def cardReceived(card: Card, sender: ActorRef): Unit = {
-    val valid: List[Int] = cardToValidNumber(card)
-    val parent: ActorSelection = context.actorSelection(sender.path.parent)
-    if (valid.contains(pileOne.head._1)) {
-      pileOne = card +: pileOne
-      sender ! AcceptCard
-    }
-    else if (valid.contains(pileTwo.head._1)) {
-      pileTwo = card +: pileTwo
-      sender ! AcceptCard
-      parent ! DealerAcceptedCard
-    }
-    else sender ! RejectCard
-
-    printDealerLayout()
-    continue()
-
+  def requestLayoutCards(): Unit = {
+    //activates var: used to check if everyone has responded
+    noPlayersResponded = 0
+    for (p <- players) p ! RequestCard
   }
 
-  /*
+    /*
   Prints current dealer and player layouts.
   Sends current layout to Players to see if they can play card.
   Players need to handle whether they are still stuck or not.
    */
-  def continue(): Unit = {
+  def resumeGame(): Unit = {
+
     //val p1Layout: Future[String] = playerOne ? CurrentLayoutRequest
-    for(i <- players) i ! CurrentGameState(List(pileOne.head, pileTwo.head))
-    printDealerLayout()
+    for(i <- players) {
+      i ! CurrentLayoutRequest
+      i ! Table(List(pileOne.head, pileTwo.head))
+    }
+    println(DealerLayout())
     playersStuck = 0
+
   }
 
-  def receive = {
-    //printing
-    case PrintTablePiles => printDealerLayout()
+  /*
+      MESSAGING
 
-    /*
-      **********   SET UP  *********
-      */
+   */
+
+  def receive = {
 
     /*
     Sends cards to children, children send card back for initial pile
+    Used to start game
      */
     case DealCards => {
       println("Dealing...")
-      playerOne ! DealCards(initialDeck.take(26))
-      playerTwo ! DealCards(initialDeck.takeRight(26))
+      playerOne ! Dealer.deal(initialDeck.take(26), playerOne)
+      playerTwo ! Dealer.deal(initialDeck.takeRight(26), playerTwo)
+      Thread.sleep(100)
+      //get cards from players for the layout
+      requestLayoutCards()
+
+
     }
 
     /*
-    Starts the game: should only be used once by the inbox.
+                    **Players send card to dealer**
+     In case of deadlock:
+    Add card from player to central piles. Doesn't proceed until both players have
+    responded. Once players have responded game continues.
+
+    In gameplay:
+      Add to pile which is valid for card. Reject if not valid. Dealer must send player a response
+      otherwise player will not proceed further.
      */
-    case StartGame => continue()
+    case SendCard(card) => {
+      //normal gameplay
+      if (noPlayersResponded == -1) {
+        //check validity
+
+        //accept or reject
+      }
+      //dealer requested card to break deadlock
+      else {
+        if (noPlayersResponded == 0) {
+          noPlayersResponded = 1
+          pileOne = card :: pileOne
+        }
+        else if (noPlayersResponded == 1) {
+          noPlayersResponded = -1
+          pileTwo = card :: pileTwo
+          resumeGame()
+        }
+      }
+    }
+
+    case Endgame => {}
+
+    case CurrentLayoutResponse(response) => {
+      println(response)
+    }
+
+    case PlayerStuck => {}
 
 
+  }
+}
+
+
+/*
 
     /*
       **********   GAME PLAY  *********
       */
-    /*
-    Add card from player to central piles. Doesn't proceed until both players have
-    responded. Once players have responded game continues.
 
-    Used for cases when neither player can proceed (deadlock)
-     */
     case CardFromPlayerPileToDealerLayout(card) => {
       if (sender() == playerOne) pileOne.+=:(card)
       else pileTwo.+=:(card)
@@ -180,6 +216,36 @@ class Dealer extends Actor(){
       context.system.terminate()
     }
   }
-  //end of dealer
 
-}
+    /*
+  /*
+  Receive card from layout. If card is valid it is added to the stack and a
+  receipt is sent to the player. If card is rejected it is returned to the player.
+  After each card transaction the dealer's layout is printed and current status
+  of the layout is sent to the players.
+   */
+  def cardReceived(card: Card, sender: ActorRef): Unit = {
+    val valid: List[Int] = cardToValidNumber(card)
+    val parent: ActorSelection = context.actorSelection(sender.path.parent)
+    if (valid.contains(pileOne.head._1)) {
+      pileOne = card +: pileOne
+      sender ! AcceptCard
+    }
+    else if (valid.contains(pileTwo.head._1)) {
+      pileTwo = card +: pileTwo
+      sender ! AcceptCard
+      parent ! DealerAcceptedCard
+    }
+    else sender ! RejectCard
+
+    printDealerLayout()
+    continue()
+
+  }
+
+
+
+*/
+  //end of dealer
+*/
+
