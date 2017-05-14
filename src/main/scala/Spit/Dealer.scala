@@ -1,11 +1,14 @@
 package Spit
 
-import Spit.Dealer.PlayerStuck
+import Spit.Dealer.{DeclaresVictory, PlayerStuck}
 import Spit.LayoutPile.{AcceptCard, RejectCard}
-import Spit.spit.{Children, CurrentLayoutRequest, DealCards, PrintTablePiles, StartGame, _}
-import akka.actor.{Actor, ActorRef, Props}
+import Spit.Player.DealerAcceptedCard
+import Spit.spit.{CurrentLayoutRequest, DealCards, PrintTablePiles, StartGame, _}
+import akka.actor.{Actor, ActorPath, ActorRef, ActorSelection, Props}
+import akka.pattern.ask
 
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.Future
 
 /*
  Dealer has custody of the piles during gameplay
@@ -14,19 +17,20 @@ import scala.collection.mutable.ListBuffer
  */
 object Dealer {
 
-  case object Children
-
+  //Request player layout: dealer -> player
   case object PrintTablePiles
-
+  //send cards to player: dealer -> player
   case object DealCards
-
+  //dealer signals commencement of game: dealer -> player
   case object StartGame
-
+  //Player signals can't continue: player -> dealer
   case object PlayerStuck
-
+  //Player sends card to dealer: player -> dealer
   case class CardFromPlayerPile(card: Card)
-
+  //Dealer request layout from player: dealer -> player
   case object CurrentLayoutRequest
+  //Player informs dealer of victory
+  case object DeclaresVictory
 
 
   //creates a shuffled deck of 52 playing cards
@@ -69,6 +73,7 @@ class Dealer extends Actor(){
    */
   def cardReceived(card: Card, sender: ActorRef): Unit = {
     val valid: List[Int] = cardToValidNumber(card)
+    val parent: ActorSelection = context.actorSelection(sender.path.parent)
     if (valid.contains(pileOne.head._1)) {
       pileOne = card +: pileOne
       sender ! AcceptCard
@@ -76,6 +81,7 @@ class Dealer extends Actor(){
     else if (valid.contains(pileTwo.head._1)) {
       pileTwo = card +: pileTwo
       sender ! AcceptCard
+      parent ! DealerAcceptedCard
     }
     else sender ! RejectCard
 
@@ -85,10 +91,12 @@ class Dealer extends Actor(){
   }
 
   /*
-  Sends current layout to Players and prints dealer layout.
+  Prints current dealer and player layouts.
+  Sends current layout to Players to see if they can play card.
   Players need to handle whether they are still stuck or not.
    */
   def continue(): Unit = {
+    //val p1Layout: Future[String] = playerOne ? CurrentLayoutRequest
     for(i <- players) i ! CurrentGameState(List(pileOne.head, pileTwo.head))
     printDealerLayout()
     playersStuck = 0
@@ -127,7 +135,7 @@ class Dealer extends Actor(){
 
     Used for cases when neither player can proceed (deadlock)
      */
-    case CardFromPlayerPile(card) => {
+    case CardFromPlayerPileToDealerLayout(card) => {
       if (sender() == playerOne) pileOne.+=:(card)
       else pileTwo.+=:(card)
       noPlayersResponded += 1
@@ -167,6 +175,10 @@ class Dealer extends Actor(){
       sender() ! CurrentLayoutRequest
     }
 
+    case DeclaresVictory => {
+      println("Player " + playerToString(sender()) + " declares victory." )
+      context.system.terminate()
+    }
   }
   //end of dealer
 

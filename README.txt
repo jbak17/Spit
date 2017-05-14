@@ -7,6 +7,20 @@ Set up:
 		Dealer requests a card from each player;
 		Dealer adds those cards to initial pile;
 
+	What is actually happening:
+	    dealer instatiated and;
+	     - creates deck;
+	     - two card piles;
+	     - two players;
+	    player instantiated and:
+	     - creates card pile; and
+	     - creates 5 layout actors
+	    layout pile instantiated and:
+	     - creates a buffer for cards
+
+	    dealer sends 26 cards to each player (dealer.dealCards)
+
+
 	StartGame
 
 The dealer reports what the two cards are;

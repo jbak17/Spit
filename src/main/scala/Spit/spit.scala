@@ -16,10 +16,6 @@ object spit extends App{
   type Deck = List[Card] //initial deck
   type CardPile = ListBuffer[Card]
 
-  //debugging
-  case object Children
-  case object Parent
-
   //  MESSAGES
 
   //  hand set up
@@ -45,7 +41,7 @@ object spit extends App{
   case class CurrentGameState(current: Deck)
   case class RequestCardFromLayoutPile(validCards: List[Int])
   case class SendSingleCard(card: Card)
-  case class CardFromPlayerPile(card: Card) //is sorted by dealer onto pile
+  case class CardFromPlayerPileToDealerLayout(card: Card) //is sorted by dealer onto pile
   case class SendMultipleCards(cards: CardPile)
 
 
@@ -55,8 +51,10 @@ object spit extends App{
   //case class CurrentPileResponse(pile: String)
   case class CurrentLayoutResponse(layout: String)
 
-  //returns the string representation of a card in form
-  // "facevalue suit" without a space, eg. A clubs = AC
+  /*
+  returns the string representation of a card in form
+  "facevalue suit" without a space, eg. A clubs = AC
+   */
   def cardToString(card: Card): String = card match {
     case (10 , _) => "T" + card._2
     case (11, _) => "J" + card._2
@@ -66,18 +64,31 @@ object spit extends App{
     case (_, _) => card._1.toString + card._2
   }
 
-  //create list with valid number value of cards that can be added
-  // on top of another card.
+  /*
+  returns string representation of player in form: "Player X"
+   */
+  def playerToString(actorRef: ActorRef): String = {
+    if (actorRef.path.toString.contains("One")) "Player One"
+    else "Player Two"
+  }
+
+  /*
+  create list with valid number value of cards that can be added
+  on top of another card.
+  Used to translate dealer layout cards into matches for players.
+   */
   def cardToValidNumber(card: Card): List[Int] = card match {
     case (1, _) => List(13, 2)
     case (13, _) => List(12, 1)
     case (_, _) => List(card._1 +1, card._1 -1)
   }
 
-  def playerToString(actorRef: ActorRef): String = {
-    if (actorRef.path.toString.contains("One")) "One"
-    else "Two"
+  def initialiseGame(): Unit = {
+    dealer ! DealCards
+    Thread.sleep(500)
+    dealer ! StartGame
   }
+
 
 
    //     ACTOR SYSTEM SETUP
@@ -85,10 +96,7 @@ object spit extends App{
   val system = ActorSystem("Spit_System")
   //create dealer
   val dealer = system.actorOf(Props[Dealer],"Dealer")
-  dealer ! DealCards
-  dealer ! CurrentLayoutRequest
-  Thread.sleep(2000)
-  dealer ! StartGame
+  initialiseGame()
 
 
   //Thread.sleep(6000) //giving 6s for all actors to finish work

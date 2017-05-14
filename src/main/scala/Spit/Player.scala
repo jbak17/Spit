@@ -1,14 +1,13 @@
 package Spit
 
-import java.util.NoSuchElementException
-
-import Spit.Dealer.PlayerStuck
+import Spit.Dealer.{DeclaresVictory, PlayerStuck}
 import Spit.LayoutPile.SendCardToPile
-import Spit.Player.{CurrentPileResponse, NoCardToPlay, PileEmpty}
+import Spit.Player.{CurrentPileResponse, DealerAcceptedCard, NoCardToPlay, PileEmpty}
 import Spit.spit._
 import akka.actor.{Actor, ActorRef, Props}
 
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 /*
@@ -18,13 +17,18 @@ Players communicate with the dealer and cardpiles
  */
 object Player {
 
-  case object DealCards
   case object NoCardToPlay
   case object PileEmpty
   case object RequestCardFromPlayerDeck
+
+  //Dealer accepts card from one of player's piles
+  case object DealerAcceptedCard
+
   case class SendMultipleCards(cards: CardPile)
   case class DealCards(cards: Deck)
+  // Current cards on layout: dealer -> player, player -> pile
   case class CurrentGameState(current: Deck)
+  // String of current pile: pile -> player
   case class CurrentPileResponse(pile: String, size: Int)
   case class NoCardAvailableFor(sndr: ActorRef)
 
@@ -54,6 +58,14 @@ class Player extends Actor(){
 
   var playerStack: CardPile = ListBuffer()
 
+  val cardsToWin = 15
+
+  //number of cards accepted by dealer
+  var cardsAccepted: Int = 0
+
+  //keep track of piles that can play, used to prevent deadlock.
+  var pilesWithNoCardToPlay: Int = 0
+
   /*
   5 layout piles are actors that can deal directly with the dealer
    */
@@ -64,14 +76,12 @@ class Player extends Actor(){
   val Pile5: ActorRef = context.actorOf(Props[LayoutPile], name = "Pile5")
 
   var layoutPiles = context.children
+
   /*
    list of actors and size of their current pile.
    Used to move cards between piles.
     */
   var layoutStatus: List[(ActorRef, Int)] = layoutPiles.zip(1 to 5).toList
-
-  var pilesWithNoCardToPlay: Int = 0
-  var emptyPiles: Int = 0
 
   var currentLayout: ListBuffer[String] = ListBuffer()
 
@@ -82,19 +92,46 @@ Eg, a starting layout: C3 C2. D9.. HK... SQ....
 */
   def printLayout(layout: List[String]): Unit = println("Current layout for " + playerToString(self) + " is: " + layout.sortBy(x => x.size).foldLeft("")((x,y) => x + y))
 
+  /*
+  Sends card from player to dealer if card available on stack.
+  @todo If no card available informs dealer stack is empty.
+   */
+  def cardFromDecktoDealer(): Unit = {
+    if (playerStack.length > 0){
+      context.parent ! CardFromPlayerPileToDealerLayout(playerStack.head)
+      playerStack = playerStack.tail
+    }
+    //else context.parent ! NoCardToPlay
+  }
+
   def receive = {
     //setup
+    /*
+    Player receives cards from dealer; builds layout; sends card from player pile.
+    @todo manage situation where player cannot form full layout
+     */
     case DealCards(cards) => {
       playerStack ++= cards
       Player.buildLayout(playerStack, layoutPiles)
       playerStack = playerStack.takeRight(playerStack.size - 15)
-      sender() ! CardFromPlayerPile(playerStack.head)
-      playerStack.remove(0)
+      cardFromDecktoDealer()
       //println("Player deck now has " + playerStack.length + " cards. Should be 10.")
 
     }
 
-    //forwards to piles
+      /*
+      Dealer informs player a card has been accepted
+      */
+    case DealerAcceptedCard => {
+      cardsAccepted += 1
+      if (cardsAccepted == cardsToWin){
+        dealer ! DeclaresVictory
+      }
+    }
+
+    /*
+    Forwards request from dealer to piles
+     */
     case CurrentLayoutRequest => for (pile <- layoutPiles) pile ! CurrentPileRequest
 
     case CurrentGameState(cards) => {
@@ -153,10 +190,11 @@ Eg, a starting layout: C3 C2. D9.. HK... SQ....
       layoutStatus.sortWith(_._2 > _._2).head._1 ! SendCardToPile(sender())
 
       pilesWithNoCardToPlay +=1
-      if (pilesWithNoCardToPlay + emptyPiles == layoutPiles.size)
+      if (pilesWithNoCardToPlay == layoutPiles.size)
         context.parent ! PlayerStuck
     }
 
+      /*
     case PileEmpty => {
       emptyPiles += 1
       if (emptyPiles == 5){
@@ -164,13 +202,14 @@ Eg, a starting layout: C3 C2. D9.. HK... SQ....
         context.system.terminate()
       }
     }
+    */
 
     /*
     Send card to dealer from stack in reponse to dealer request
      */
     case RequestCardFromPlayerDeck => {
       if (playerStack.nonEmpty){
-        sender() ! CardFromPlayerPile(playerStack.head)
+        sender() ! CardFromPlayerPileToDealerLayout(playerStack.head)
         playerStack = playerStack.tail
         println("Card sent from player deck")
       }

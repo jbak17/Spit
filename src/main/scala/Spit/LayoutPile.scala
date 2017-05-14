@@ -33,8 +33,8 @@ class LayoutPile extends Actor(){
   }
 
   var pile: mutable.ListBuffer[Card] = ListBuffer()
-  var cardLimbo: Boolean = false
-  var dead: Boolean = false
+  var cardLimbo: Boolean = false //waiting for dealer?
+  var dead: Boolean = false //is pile empty
 
   // String representation of pile
   def currentPile(): String = {
@@ -50,6 +50,7 @@ class LayoutPile extends Actor(){
    */
   def gameStateResponse(cards: List[Int]) = {
 
+    //pile has cards and isn't waiting for dealer response to previous send
     if (pile.nonEmpty & cardLimbo != true){
       if (cards.contains(pile.head._1))
       {
@@ -57,12 +58,20 @@ class LayoutPile extends Actor(){
         cardLimbo = true
         println("Layout from " + playerToString(context.parent) + " sent " + cardToString(pile.head) + " to dealer.")
       }
+      //informs player that pile is stuck with current layout
       else context.parent ! NoCardToPlay
     }
-    else if (dead == false) {
+    //pile muse wait until dealer responds
+    else if (cardLimbo) {
+      Thread.sleep(200)
+      context.parent ! PileEmpty
+    }
+    //pile has no card to play inform player that it needs a card from another pile
+    else if (pile.isEmpty) {
       dead = true
       context.parent ! PileEmpty
     }
+    else println("Pile empty")
   }
 
 
@@ -83,7 +92,7 @@ class LayoutPile extends Actor(){
     Used to respond to request from player to provide a card to another pile
      */
     case SendCardToPile(sndr) => {
-      if (pile.length != 0) {
+      if (pile.nonEmpty & !cardLimbo) {
         sndr ! MoveBetweenPiles(pile.head)
         pile.remove(0)
       }
