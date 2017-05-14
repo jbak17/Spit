@@ -1,14 +1,8 @@
 package Spit
 
 import Spit.spit._
-import akka.actor.FSM.Failure
-import akka.actor.Status.Success
 import akka.actor.{Actor, ActorPath, ActorRef, ActorSelection, Props}
-import akka.pattern.ask
-
 import scala.annotation.tailrec
-import scala.collection.mutable.ListBuffer
-import scala.concurrent.Future
 
 /*
  Dealer has custody of the piles during gameplay
@@ -198,77 +192,4 @@ class Dealer extends Actor() {
   }
 }
 
-
-/*
-
-    /*
-      **********   GAME PLAY  *********
-      */
-
-    case CardFromPlayerPileToDealerLayout(card) => {
-      if (sender() == playerOne) pileOne.+=:(card)
-      else pileTwo.+=:(card)
-      noPlayersResponded += 1
-      if (noPlayersResponded == 2){
-        noPlayersResponded = 0
-        continue()
-      }
-    }
-
-    /*
-    Request from each player the current layout
-    Used for preparing console output.
-     */
-    case CurrentLayoutRequest => for(i <- players) i ! CurrentLayoutRequest
-
-    /*
-    Used to receive a single card from a player during gameplay.
-    The cardReceived function will determine how to respond to card with
-    either accept/reject.
-     */
-    case SendSingleCard(card) => {
-      val sndr: ActorRef = sender()
-      cardReceived(card, sndr)
-    }
-
-    /*
-    Player reports to dealer that they are stuck.
-    If both players are stuck the dealer requests a new card from each.
-     */
-    case PlayerStuck => {
-      playersStuck += 1
-      if (playersStuck == 2){
-        for(i <- players) i ! RequestCardFromPlayerDeck
-        playersStuck = 0
-      }
-      println("Player " + playerToString(sender()) + " stuck" )
-      sender() ! CurrentLayoutRequest
-    }
-
-    case DeclaresVictory => {
-      println("Player " + playerToString(sender()) + " declares victory." )
-      context.system.terminate()
-    }
-  }
-
-    /*
-  /*
-  Receive card from layout. If card is valid it is added to the stack and a
-  receipt is sent to the player. If card is rejected it is returned to the player.
-  After each card transaction the dealer's layout is printed and current status
-  of the layout is sent to the players.
-   */
-  def cardReceived(card: Card, sender: ActorRef): Unit = {
-
-
-    printDealerLayout()
-    continue()
-
-  }
-
-
-
-*/
-  //end of dealer
-*/
 

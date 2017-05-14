@@ -2,9 +2,6 @@ package Spit
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 
-import scala.collection.mutable
-import scala.collection.mutable.{ListBuffer, MutableList}
-import scala.util.matching.Regex
 /**
   * Created by jeva on 17/04/17.
   */
