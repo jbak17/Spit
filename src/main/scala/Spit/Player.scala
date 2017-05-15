@@ -1,11 +1,9 @@
 package Spit
 
 import Spit.spit._
-import akka.actor.{Actor, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging}
 
 import util.control.Breaks._
-import scala.concurrent.{Await, Future}
-import akka.pattern.ask
 
 /*
 Players have their deck of remaining cards and
@@ -46,8 +44,8 @@ object Player {
 }
 
 
-class Player extends Actor() {
-  println("Player created")
+class Player extends Actor  with ActorLogging {
+  log.debug("Player created")
 
   var playerStack: Deck = List()
   var playerLayout: List[CardPile] = List()
@@ -84,7 +82,10 @@ class Player extends Actor() {
     /*
     Dealer sending card to player.
      */
-    case SendCard(card) => playerStack = card :: playerStack
+    case SendCard(card) => {
+      playerStack = card :: playerStack
+      log.debug(playerToString(self) + " received {}", cardToString(card))
+    }
 
     /*
     Player to deal with
@@ -94,7 +95,7 @@ class Player extends Actor() {
      that the player has entered the endgame.
       */
     case BuildLayout => {
-      println(s"Player's stack has " + playerStack.size + " cards.")
+      log.debug(playerToString(self) + "'s stack has " + playerStack.size + " cards.")
       if (playerStack.size > 15) {
         playerLayout = Player.buildLayout(playerStack.take(15))
         playerStack = playerStack.drop(15)
@@ -103,6 +104,7 @@ class Player extends Actor() {
         playerLayout = Player.buildLayout(playerStack)
         playerStack = List()
         dealer ! Endgame
+        log.debug(playerToString(self) + " has entered endgame")
       }
 
     }
@@ -111,6 +113,7 @@ class Player extends Actor() {
     case AcceptCard => {
       cardsAccepted += 1
       playerLimbo = false
+      log.debug(playerToString(self) + "playerLimbo = false")
       println(buildLayoutString())
       if (cardsAccepted == cardsToWin) {
         dealer ! DeclaresVictory
@@ -121,6 +124,7 @@ class Player extends Actor() {
     case RejectCard(card) => {
       playerLimbo = false
       playerLayout(pileIndex).sendCard(card)
+      log.debug(playerToString(self) + "playerLimbo = false")
     }
 
     //current cards facing on table
@@ -141,7 +145,7 @@ class Player extends Actor() {
               playerLimbo = true
               pileIndex = playerLayout.indexOf(pile)
               println(playerToString(self) + " sent " + cardToString(cardSubmit) + " to dealer.")
-
+              log.debug(s"{} sent {} to dealer.", playerToString(self), cardToString(cardSubmit))
               break
             }
             else pilesWithNoCardToPlay += 1
@@ -151,6 +155,8 @@ class Player extends Actor() {
         }
 
       }
+      else if (playerLimbo) log.debug(playerToString(self) + " in limbo: waiting on dealer.")
+
 
 
     }
@@ -168,6 +174,7 @@ class Player extends Actor() {
         sender() ! SendCard(playerStack.head)
         playerStack = playerStack.tail
       }
+      log.debug(s"{} sent card on request of dealer.", playerToString(self))
     }
 
   }

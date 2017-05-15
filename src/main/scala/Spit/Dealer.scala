@@ -1,7 +1,7 @@
 package Spit
 
 import Spit.spit._
-import akka.actor.{Actor, ActorPath, ActorRef, ActorSelection, Props}
+import akka.actor.{Actor, ActorPath, ActorRef, ActorSelection, Props, ActorLogging}
 import scala.annotation.tailrec
 
 /*
@@ -37,8 +37,8 @@ object Dealer {
   }
 }
 
-class Dealer extends Actor() {
-  println("Dealer created")
+class Dealer extends Actor with ActorLogging {
+  log.debug("Dealer created")
 
   /*
   Initialisation
