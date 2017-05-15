@@ -117,8 +117,12 @@ class Dealer extends Actor with ActorLogging {
       Thread.sleep(100)
       //get cards from players for the layout
       requestLayoutCards()
+      log.debug("Dealer dealing...")
 
+    }
 
+    case Sync => {
+      sender() ! Table(List(pileOne.head, pileTwo.head))
     }
 
     /*

@@ -21,6 +21,7 @@ import scala.util.Random
   */
 class spit$Test extends FlatSpec with ScalaFutures {
 
+
   def createDeck(): Deck = {
     val suits: List[String] = List("H", "S", "C", "D")
     val deck: Deck = for (
@@ -32,11 +33,52 @@ class spit$Test extends FlatSpec with ScalaFutures {
     scala.util.Random.shuffle(deck)
   }
 
+  final def buildLayout(deck: Deck): List[CardPile] = {
+
+    var cards: List[Card] = deck
+
+    var pileOne: CardPile = new CardPile(1)
+    var pileTwo: CardPile = new CardPile(2)
+    var pileThree: CardPile = new CardPile(3)
+    var pileFour: CardPile = new CardPile(4)
+    var pileFive: CardPile = new CardPile(5)
+
+    var layout: List[CardPile] = List(pileOne, pileTwo, pileThree, pileFour, pileFive)
+
+    while (cards.nonEmpty)
+      for (pile <- layout){
+        if (!pile.isFull()) {
+          pile.sendCard(cards.head)
+          cards = cards.tail
+        }
+      }
+    layout
+  }
+
+  def buildLayoutString(playerLayout: List[CardPile]): String = {
+    var pileStatus: List[(Card, Int, Int)] = List()
+    for (pile <- playerLayout) {
+      pileStatus = pile.status() :: pileStatus
+    }
+    pileStatus.sortWith(_._3 < _._3)
+    //sorted on third element of tuple
+    var outString: List[String] = List()
+    for (p <- pileStatus) {
+      outString = (cardToString(p._1) + "." * p._2 + " ") :: outString
+    }
+    "layout: " + outString.foldLeft("")(_ + _)
+  }
+
+
   //helper variables
   val deck: Deck = createDeck()
   val face_card: Card = (11, "S")
   val number_card: Card = (9, "A")
   val pile2: CardPile = new CardPile(2)
+  val layoutFull: List[CardPile] = buildLayout(deck)
+
+  var unbalancedLayout: List[CardPile] = layoutFull
+  unbalancedLayout(0).getCard()
 
   "A deck" should "have 52 cards" in {
     val deck: Deck = createDeck()
@@ -95,6 +137,11 @@ class spit$Test extends FlatSpec with ScalaFutures {
     val crd: Card = pile2.getCard()
     val end = pile2.size()
     assertResult(false)(start == end)
+  }
+
+  "A layout" should "be non-balanced with an empty cardpile" in {
+    assert(false == Player.isLayoutBalanced(unbalancedLayout))
+    assert(true == Player.isLayoutBalanced(layoutFull))
   }
 
 
@@ -201,7 +248,7 @@ class TestKitUsageSpec
 
 object TestKitUsageSpec {
   // Define your test specific configuration here
-  val config = """
+  val config =
     akka {
       loglevel = "WARNING"
     }

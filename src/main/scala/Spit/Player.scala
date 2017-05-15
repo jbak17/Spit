@@ -41,6 +41,12 @@ object Player {
    */
   def playableCards(cards: Deck): List[Int] = cards.map(card => cardToValidNumber(card)).flatten
 
+  /*
+  Checks if there any empty piles in layout.
+ */
+  def isLayoutBalanced(layout: List[CardPile]): Boolean = {
+    !layout.exists(p => p.isEmpty())
+  }
 }
 
 
@@ -76,6 +82,27 @@ class Player extends Actor  with ActorLogging {
     playerToString(self) + "'s layout: " + outString.foldLeft("")(_ + _)
   }
 
+
+  /*
+  Moves cards from full to empty stacks.
+   */
+  def balanceLayout(currentLayout: List[CardPile]): List[CardPile] = {
+    //check that there won't always be an empty pile -- near end of hand
+    log.debug("{} balancing layout", playerToString(self))
+    if (!(cardsToWin - cardsAccepted <= 5)) {
+      var oldLayout = currentLayout
+      //checks if there are empty piles
+      //repeats until no empty piles
+      while (!Player.isLayoutBalanced(oldLayout)) {
+        val emptyIndex: Int = oldLayout.indexOf(oldLayout.filter(CP => CP.isEmpty()).head) //get empty index
+        val highIndex: Int = oldLayout.map(CP => (oldLayout.indexOf(CP), CP.size())).sortWith(_._2 > _._2).head._1 //get highest index
+        val swapCard: Card = oldLayout(highIndex).getCard() //card from highest pile
+        oldLayout(emptyIndex).sendCard(swapCard) //add card to empty pile
+      }
+      oldLayout
+    }
+    else currentLayout
+  }
 
   def receive = {
 
@@ -113,6 +140,8 @@ class Player extends Actor  with ActorLogging {
     case AcceptCard => {
       cardsAccepted += 1
       playerLimbo = false
+      //check for empty piles and balance
+      playerLayout = balanceLayout(playerLayout)
       log.debug(playerToString(self) + "playerLimbo = false")
       println(buildLayoutString())
       if (cardsAccepted == cardsToWin) {
@@ -124,7 +153,9 @@ class Player extends Actor  with ActorLogging {
     case RejectCard(card) => {
       playerLimbo = false
       playerLayout(pileIndex).sendCard(card)
+      dealer ! Sync
       log.debug(playerToString(self) + "playerLimbo = false")
+      log.debug(playerToString(self) + "sent sync request")
     }
 
     //current cards facing on table

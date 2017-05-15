@@ -33,6 +33,7 @@ object spit extends App{
    */
   case object Endgame //player declares non-full layout
   case class CurrentLayoutResponse(layout: String) //player shows layout to dealer
+  case object Sync //player to request table, prevent player being unaware of layout.
   case object PlayerStuck //player with no card to play.
   case object DealCards //used to start game.
   case object DeclaresVictory
