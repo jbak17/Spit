@@ -44,4 +44,11 @@ class CardPile(max_size: Int) {
   def sendCard(card: Card): Unit =
     if (cards.length < max) cards = card :: cards
 
+  /*
+  Return remaining cards in pile and clears pile.
+   */
+  def returnCards(): List[Card] = {
+    try {cards} finally cards = List()
+  }
+
 }

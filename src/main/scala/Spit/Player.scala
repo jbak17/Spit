@@ -4,6 +4,7 @@ import Spit.spit._
 import akka.actor.{Actor, ActorLogging}
 
 import util.control.Breaks._
+import scala.util.Random.shuffle
 
 /*
 Players have their deck of remaining cards and
@@ -12,7 +13,7 @@ Players communicate with the dealer and cardpiles
  */
 object Player {
 
-
+  val emptyCard: Card = (0, "X") //used to signal empty stack
 
   final def buildLayout(deck: Deck): List[CardPile] = {
 
@@ -47,6 +48,7 @@ object Player {
   def isLayoutBalanced(layout: List[CardPile]): Boolean = {
     !layout.exists(p => p.isEmpty())
   }
+
 }
 
 
@@ -82,6 +84,12 @@ class Player extends Actor  with ActorLogging {
     playerToString(self) + "'s layout: " + outString.foldLeft("")(_ + _)
   }
 
+
+  /*
+  At the end of a hand the cards remaining in the layout need to be returned
+  to the players stack. Only relevant for losing player.
+   */
+  def layoutCardsToStack(layout: List[CardPile]): Deck = layout.flatMap(cp => cp.returnCards())
 
   /*
   Moves cards from full to empty stacks.
@@ -142,7 +150,7 @@ class Player extends Actor  with ActorLogging {
       playerLimbo = false
       //check for empty piles and balance
       playerLayout = balanceLayout(playerLayout)
-      log.debug(playerToString(self) + "playerLimbo = false")
+      log.debug(playerToString(self) + "player active")
       println(buildLayoutString())
       if (cardsAccepted == cardsToWin) {
         dealer ! DeclaresVictory
@@ -154,7 +162,7 @@ class Player extends Actor  with ActorLogging {
       playerLimbo = false
       playerLayout(pileIndex).sendCard(card)
       dealer ! Sync
-      log.debug(playerToString(self) + "playerLimbo = false")
+      log.debug(playerToString(self) + "player active")
       log.debug(playerToString(self) + "sent sync request")
     }
 
@@ -175,7 +183,7 @@ class Player extends Actor  with ActorLogging {
               dealer ! SendCard(cardSubmit)
               playerLimbo = true
               pileIndex = playerLayout.indexOf(pile)
-              println(playerToString(self) + " sent " + cardToString(cardSubmit) + " to dealer.")
+              //println(playerToString(self) + " sent " + cardToString(cardSubmit) + " to dealer.")
               log.debug(s"{} sent {} to dealer.", playerToString(self), cardToString(cardSubmit))
               break
             }
@@ -186,7 +194,7 @@ class Player extends Actor  with ActorLogging {
         }
 
       }
-      else if (playerLimbo) log.debug(playerToString(self) + " in limbo: waiting on dealer.")
+      else if (playerLimbo) log.debug(playerToString(self) + " paused: waiting on dealer to consider submitted card.")
 
 
 
@@ -204,9 +212,21 @@ class Player extends Actor  with ActorLogging {
       if (playerStack.nonEmpty) {
         sender() ! SendCard(playerStack.head)
         playerStack = playerStack.tail
+        log.debug(s"{} sent card on request of dealer.", playerToString(self))
+        playerLimbo = false
+      } else sender() ! SendCard(Player.emptyCard)
       }
-      log.debug(s"{} sent card on request of dealer.", playerToString(self))
+
+    case Handover => {
+      log.debug("Handover commenced")
+      playerLimbo = true
+      cardsAccepted = 0
+      val remainingCards: Deck = layoutCardsToStack(playerLayout)
+      log.debug("{} had {} cards remaining at end of hand", playerToString(self), remainingCards.length)
+      playerStack = shuffle(playerStack ::: remainingCards)
+
     }
 
+    case DealerBusy => {}
   }
 }

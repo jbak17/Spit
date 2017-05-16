@@ -1,7 +1,10 @@
 package Spit
 
+import java.util.NoSuchElementException
+
 import Spit.spit._
-import akka.actor.{Actor, ActorPath, ActorRef, ActorSelection, Props, ActorLogging}
+import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, ActorSelection, Props}
+
 import scala.annotation.tailrec
 
 /*
@@ -24,9 +27,11 @@ object Dealer {
     scala.util.Random.shuffle(deck)
   }
 
+  /*
+  Sends a succession of cards to a player.
+   */
   @tailrec
   def deal(cards: Deck, player: ActorRef):Unit = {
-    //true to let player know to expect more cards
     if (cards.tail.nonEmpty) player ! SendCard(cards.head)
     else {
       player ! SendCard(cards.head)
@@ -60,6 +65,8 @@ class Dealer extends Actor with ActorLogging {
   var noPlayersResponded: Int = -1 //used to ensure that both players submit card after deadlock
   var stringCache: List[String] = List() //used to cache layout responses for pretty printing
 
+  var victoryDeclared: Boolean = false //used to ensure dealer doesn't reset game twice.
+
   /* ******************
     DEALER FUNCTIONS
   ********************* */
@@ -73,14 +80,17 @@ class Dealer extends Actor with ActorLogging {
    */
   def requestLayoutCards(): Unit = {
     //activates var: used to check if everyone has responded
+    log.debug("Dealer requests layout cards")
     noPlayersResponded = 0
     for (p <- players) p ! RequestCard
   }
 
   //Prints each element of cache and clears cache
-  def printCache(): Unit =
+  def printCache(): Unit = {
+    log.debug("Dealer printing cache")
     for (i <- stringCache) println(i)
     stringCache = List()
+  }
 
     /*
   Prints current dealer and player layouts.
@@ -91,7 +101,7 @@ class Dealer extends Actor with ActorLogging {
 
     stringCache = DealerLayout() :: stringCache
     for(i <- players) {
-      i ! CurrentLayoutRequest
+      i ! CurrentLayoutRequest //get strings of layouts from players
       Thread.sleep(200)
       i ! Table(List(pileOne.head, pileTwo.head))
     }
@@ -122,7 +132,18 @@ class Dealer extends Actor with ActorLogging {
     }
 
     case Sync => {
-      sender() ! Table(List(pileOne.head, pileTwo.head))
+      if (pileOne.nonEmpty & pileTwo.nonEmpty) {
+        sender() ! Table(List(pileOne.head, pileTwo.head))
+        log.debug("Dealer sent Table to {}", playerToString(sender()))
+      }
+      else {
+        Thread.sleep(100)
+        if (pileOne.nonEmpty & pileTwo.nonEmpty) sender() ! Table(List(pileOne.head, pileTwo.head))
+        else {
+          sender() ! DealerBusy
+          log.debug("Dealer busy")
+        }
+      }
     }
 
     /*
@@ -142,29 +163,37 @@ class Dealer extends Actor with ActorLogging {
         val valid: List[Int] = cardToValidNumber(card)
         //accept or reject
         if (valid.contains(pileOne.head._1)) {
+          log.debug("Dealer accepted card {}", cardToString(card))
           println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
           pileOne = card :: pileOne
           sender ! AcceptCard
           resumeGame()
         }
         else if (valid.contains(pileTwo.head._1)) {
+          log.debug("Dealer accepted card {}", cardToString(card))
           println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
           pileTwo = card :: pileTwo
           sender ! AcceptCard
           resumeGame()
         }
-        else sender ! RejectCard(card)
+        else {
+          sender ! RejectCard(card)
+          log.debug("Dealer rejected card {}", cardToString(card))
+        }
 
       }
       //dealer requested card to break deadlock
       else {
         if (noPlayersResponded == 0) {
+          log.debug("1. {} sent {} on request of dealer", playerToString(sender()), cardToString(card))
           noPlayersResponded = 1
-          pileOne = card :: pileOne
+          //empty card
+          if (card._1 != 0) pileOne = card :: pileOne
         }
         else if (noPlayersResponded == 1) {
-          noPlayersResponded = -1
-          pileTwo = card :: pileTwo
+          log.debug("2. {} sent {} on request of dealer", playerToString(sender()), cardToString(card))
+          noPlayersResponded = -1 //reset to normal gamestate
+          if (card._1 != 0) pileTwo = card :: pileTwo
           resumeGame()
         }
       }
@@ -180,16 +209,56 @@ class Dealer extends Actor with ActorLogging {
     }
 
     case PlayerStuck => {
-      println(playerToString(sender()) + " stuck.")
-      playersStuck += 1
-      if (playersStuck == 2){
-        requestLayoutCards()
-        playersStuck = 0
+      synchronized {
+        log.debug("{} stuck", playerToString(sender()))
+        println(playerToString(sender()) + " stuck.")
+        playersStuck += 1
+        if (playersStuck == 2){
+          requestLayoutCards()
+          playersStuck = 0
+        }
       }
     }
-
+    /*
+    Occurs when player declares victory.
+    The loser will need to move their cards to their stack.
+    The winner gets the lesser pile, on the assumption that we need
+    some way of rewarding victory.
+     */
     case DeclaresVictory => {
       println(playerToString(sender()) + " declares Victory!!")
+      log.debug(playerToString(sender()) + " declares Victory!!")
+
+      for (p <- players) p ! Handover //tells players to stop what they're doing
+
+      val shortpile: List[Card] = if (pileOne.length < pileTwo.length) pileOne else pileTwo
+      val longpile: List[Card] = if (pileOne.length > pileTwo.length) pileOne else pileTwo
+
+
+      val winner: ActorRef = sender()
+      val loser: ActorRef = if (sender() == playerOne) playerTwo else playerOne
+
+      //send cards to players
+      //reset dealer piles.
+      pileOne = shortpile.head :: List()
+      pileTwo = longpile.head :: List()
+      Thread.sleep(200)
+      try {
+        Dealer.deal(shortpile.tail, winner) //short stack to winner
+        Dealer.deal(longpile.tail, loser) //long stack to loser
+        log.debug("Players sent new cards")
+      } catch {
+        case el: NoSuchElementException => {
+          Thread.sleep(200)
+          Dealer.deal(shortpile.tail, winner) //short stack to winner
+          Dealer.deal(longpile.tail, loser) //long stack to loser
+        }
+      }
+
+
+      //Resume game
+      Thread.sleep(200)
+      resumeGame()
     }
 
 

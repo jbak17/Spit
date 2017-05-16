@@ -10,6 +10,7 @@ object spit extends App{
 
   type Card = (Int, String)
   type Deck = List[Card] //initial deck
+  type Layout = List[CardPile]
 
   //  MESSAGES
 
@@ -27,6 +28,8 @@ object spit extends App{
   case object CurrentLayoutRequest //send string repr to dealer
   case object RequestCard //used by dealer to break deadlock/start hand
   case object BuildLayout //used to start hand.
+  case object Handover //used at end of hand, player to await instructions
+  case object DealerBusy //used to make player wait for a moment
 
   /*
   Dealer to manage
