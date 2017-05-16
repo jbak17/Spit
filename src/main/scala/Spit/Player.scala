@@ -49,6 +49,7 @@ object Player {
     !layout.exists(p => p.isEmpty())
   }
 
+  def currentLayoutSize(layout: Layout): Int = layout.map(x => x.size()).foldLeft(0)(_+_)
 }
 
 
@@ -127,9 +128,6 @@ class Player extends Actor  with ActorLogging {
     }
 
     /*
-    Player to deal with
-     */
-    /*
      Builds player layout. If the player has less than 15 cards the dealer is informed
      that the player has entered the endgame.
       */
@@ -163,7 +161,7 @@ class Player extends Actor  with ActorLogging {
 
     //dealer rejects
     case RejectCard(card) => {
-      playerLimbo = false
+      synchronized(playerLimbo = false)
       playerLayout(pileIndex).sendCard(card)
       dealer ! Sync
       log.debug(playerToString(self) + "player active")
@@ -198,8 +196,10 @@ class Player extends Actor  with ActorLogging {
         }
 
       }
-      else if (playerLimbo) log.debug(playerToString(self) + " paused: waiting on dealer to consider submitted card.")
-
+      else if (cardsAccepted + Player.currentLayoutSize(playerLayout) == cardsToWin){
+        log.debug(playerToString(self) + " paused: likely concurrent update error.")
+        Thread.sleep(1000)
+      }
 
 
     }
@@ -213,13 +213,18 @@ class Player extends Actor  with ActorLogging {
 
     //used by dealer to break deadlock/start hand
     case RequestCard => {
+      Thread.sleep(500)
       if (playerStack.nonEmpty) {
         sender() ! SendCard(playerStack.head)
         playerStack = playerStack.tail
         log.debug(s"{} sent card on request of dealer.", playerToString(self))
         playerLimbo = false
-      } else sender() ! SendCard(Player.emptyCard)
       }
+      else {
+        sender() ! SendCard(Player.emptyCard)
+        log.debug("{} stack empty.", playerToString(self))
+      }
+    }
 
     case Handover => {
       log.debug("Handover commenced")

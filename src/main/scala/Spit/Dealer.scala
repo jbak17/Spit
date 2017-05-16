@@ -267,7 +267,7 @@ class Dealer extends Actor with ActorLogging {
 
 
       //Resume game
-      Thread.sleep(200)
+      Thread.sleep(1000)
       resumeGame()
     }
 
