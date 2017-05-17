@@ -1,5 +1,8 @@
 package Spit
 
+import java.lang.IndexOutOfBoundsException
+import java.util.NoSuchElementException
+
 import Spit.spit._
 import akka.actor.{Actor, ActorLogging}
 
@@ -43,11 +46,22 @@ object Player {
   def playableCards(cards: Deck): List[Int] = cards.map(card => cardToValidNumber(card)).flatten
 
   /*
-  Checks if there any empty piles in layout.
+  Checks if the layout is balanced.
+   A layout is balanced if there are no piles with more than one card
+   if there are any empty piles in layout.
  */
   def isLayoutBalanced(layout: List[CardPile]): Boolean = {
-    !layout.exists(p => p.isEmpty())
+    val empty: Boolean = layout.exists(p => p.isEmpty())
+    val gt1: Boolean = layout.exists(p => p.size() > 1)
+    if (empty & gt1) false else true
   }
+
+  /*
+  Counts empty piles: used when player has less than 5 cards left
+  We don't want balance to enter an infinite loop of shuffling cards
+  from pile to pile
+   */
+  def countEmpty(layout: Layout): Int = layout.count(p => p.isEmpty())
 
   def currentLayoutSize(layout: Layout): Int = layout.map(x => x.size()).foldLeft(0)(_+_)
 }
@@ -96,12 +110,16 @@ class Player extends Actor  with ActorLogging {
 
   /*
   Moves cards from full to empty stacks.
-   */
+
   def balanceLayout(currentLayout: List[CardPile]): List[CardPile] = {
     //check that there won't always be an empty pile -- near end of hand
     log.debug("{} balancing layout", playerToString(self))
+
+    var oldLayout = currentLayout
+    //less than 5 cards left but more than one card in a pile
+    val crdsRemaining: Int = cardsToWin - cardsAccepted
+
     if (!(cardsToWin - cardsAccepted <= 5)) {
-      var oldLayout = currentLayout
       //checks if there are empty piles
       //repeats until no empty piles
       while (!Player.isLayoutBalanced(oldLayout)) {
@@ -114,7 +132,44 @@ class Player extends Actor  with ActorLogging {
       }
       oldLayout
     }
+    else if (crdsRemaining + Player.countEmpty(currentLayout) != 5){
+      while (crdsRemaining + Player.countEmpty(currentLayout) != 5){
+        val emptyIndex: Int = oldLayout.indexOf(oldLayout.filter(CP => CP.isEmpty()).head) //get empty index
+        val highIndex: Int = oldLayout.map(CP => (oldLayout.indexOf(CP), CP.size())).sortWith(_._2 > _._2).head._1 //get highest index
+        val swapCard: Card = oldLayout(highIndex).getCard() //card from highest pile
+        oldLayout(emptyIndex).sendCard(swapCard) //add card to empty pile
+        //Player 1, 7s to empty stack. Layout: 7s Ac 6h.. Qd.. 3c....
+        println(s"${playerToString(self)}, ${cardToString(swapCard)} to empty stack. ${buildLayoutString(oldLayout)}" )
+      }
+      oldLayout
+    }
     else currentLayout
+  }
+*/
+  /*
+ Moves cards from full to empty stacks.
+  */
+  def balanceLayout(currentLayout: List[CardPile]): List[CardPile] = {
+    log.debug("Balancing {}", playerToString(self))
+    var oldLayout = currentLayout
+    //checks if there are empty piles and a pile > 1
+    while (!Player.isLayoutBalanced(oldLayout)) {
+      try {
+        //get empty index
+        val emptyIndex: Int = oldLayout.indexOf(oldLayout.filter(CP => CP.isEmpty()).head)
+        //get highest index
+        val highIndex: Int = oldLayout.map(CP => (oldLayout.indexOf(CP), CP.size())).sortWith(_._2 > _._2).head._1
+        //card from highest pile
+        val swapCard: Card = oldLayout(highIndex).getCard()
+        //add card to empty pile
+        oldLayout(emptyIndex).sendCard(swapCard)
+      } catch {
+        case nse: NoSuchElementException => log.debug("A problem balancing {} with {}", playerToString(self), nse)
+          oldLayout
+      }
+
+    }
+    oldLayout
   }
 
   def printStartStatus(): Unit = {
