@@ -67,6 +67,8 @@ class Dealer extends Actor with ActorLogging {
 
   var victoryDeclared: Boolean = false //used to ensure dealer doesn't reset game twice.
 
+  var endGame: Int = 0 // 0 normal, 1 playerOne, 2 playerTwo
+
   /* ******************
     DEALER FUNCTIONS
   ********************* */
@@ -106,6 +108,15 @@ class Dealer extends Actor with ActorLogging {
       i ! Table(List(pileOne.head, pileTwo.head))
     }
     playersStuck = 0
+
+  }
+
+  /*
+  Ends game on terminate.
+   */
+  def gameOver(flag: Int): Unit = {
+    println("Player {} wins", flag)
+    context.system.terminate()
 
   }
 
@@ -206,7 +217,11 @@ class Dealer extends Actor with ActorLogging {
       }
     }
 
-    case Endgame => {}
+    /*
+    Set endgame flag to appropriate player.
+     */
+    case Endgame => if (sender == playerOne) endGame = 1 else endGame = 2
+
 
     case CurrentLayoutResponse(response) => {
       stringCache = response :: stringCache
@@ -234,36 +249,47 @@ class Dealer extends Actor with ActorLogging {
      */
     case DeclaresVictory => {
 
-      for (p <- players) p ! Handover //tells players to stop what they're doing
+      //normal gameplay
+      if (endGame == 0) {
 
-      val shortpile: List[Card] = if (pileOne.length < pileTwo.length) pileOne else pileTwo
-      val longpile: List[Card] = if (pileOne.length > pileTwo.length) pileOne else pileTwo
+        println(playerToString(sender()) + " declares Victory!!")
+        log.debug(playerToString(sender()) + " declares Victory!!")
 
+        for (p <- players) p ! Handover //tells players to stop what they're doing
 
-      val winner: ActorRef = sender()
-      val loser: ActorRef = if (sender() == playerOne) playerTwo else playerOne
+        val shortpile: List[Card] = if (pileOne.length < pileTwo.length) pileOne else pileTwo
+        val longpile: List[Card] = if (pileOne.length > pileTwo.length) pileOne else pileTwo
 
-      val pileStr: Int = if (pileOne.length < pileTwo.length) 1 else 2
+        val winner: ActorRef = sender()
+        val loser: ActorRef = if (sender() == playerOne) playerTwo else playerOne
 
-      println(s"${playerToString(sender)} out! Slaps hand on discard pile ${pileStr}")
-      log.debug(playerToString(sender()) + " declares Victory!!")
+        val pileStr: Int = if (pileOne.length < pileTwo.length) 1 else 2
 
-      //send cards to players
-      //reset dealer piles.
-      pileOne = shortpile.head :: List()
-      pileTwo = longpile.head :: List()
-      Thread.sleep(200)
-      try {
-        Dealer.deal(shortpile.tail, winner) //short stack to winner
-        Dealer.deal(longpile.tail, loser) //long stack to loser
-        log.debug("Players sent new cards")
-      } catch {
-        case el: NoSuchElementException => {
-          Thread.sleep(200)
+        println(s"${playerToString(sender)} out! Slaps hand on discard pile ${pileStr}")
+        log.debug(playerToString(sender()) + " declares Victory!!")
+
+        //send cards to players
+        //reset dealer piles.
+        pileOne = shortpile.head :: List()
+        pileTwo = longpile.head :: List()
+        Thread.sleep(200)
+        try {
           Dealer.deal(shortpile.tail, winner) //short stack to winner
           Dealer.deal(longpile.tail, loser) //long stack to loser
+          log.debug("Players sent new cards")
+        } catch {
+          case el: NoSuchElementException => {
+            Thread.sleep(200)
+            Dealer.deal(shortpile.tail, winner) //short stack to winner
+            Dealer.deal(longpile.tail, loser) //long stack to loser
+            log.debug("Players sent new cards")
+          }
         }
       }
+      else if (endGame == 1) {gameOver(1)}
+      else {gameOver(2)}
+
+
 
 
       //Resume game

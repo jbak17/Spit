@@ -198,7 +198,7 @@ class Player extends Actor  with ActorLogging {
       }
       else if (cardsAccepted + Player.currentLayoutSize(playerLayout) == cardsToWin){
         log.debug(playerToString(self) + " paused: likely concurrent update error.")
-        Thread.sleep(1000)
+        Thread.sleep(1250)
       }
 
 
