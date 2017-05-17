@@ -79,8 +79,8 @@ class Player extends Actor  with ActorLogging {
   //number of cards accepted by dealer
   var cardsAccepted: Int = 0
 
-  //keep track of piles that can play, used to prevent deadlock.
-  var pilesWithNoCardToPlay: Int = 0
+  //keep track of most recent table layout
+  var currentCards: List[Card] = List.empty
 
   //flag that player is waiting on dealer to accept card
   var playerLimbo: Boolean = false
@@ -196,12 +196,11 @@ class Player extends Actor  with ActorLogging {
 
     //current cards facing on table
     case Table(deck) => {
+      //update cards
+      currentCards = deck
       //get list of valid card numbers
       if (!playerLimbo) {
         val validCards: List[Int] = Player.playableCards(deck)
-
-        //New hand so reset counter
-        //pilesWithNoCardToPlay = 0
 
         //contains card
         if (playerLayout.filter(cp => validCards.contains(cp.top()._1)).nonEmpty){
@@ -209,30 +208,10 @@ class Player extends Actor  with ActorLogging {
           pileIndex = playerLayout.indexOf(pile)
           dealer ! SendCard(playerLayout.filter(cp => validCards.contains(cp.top()._1)).head.getCard(), buildLayoutString(playerLayout))
         } else dealer ! PlayerStuck
-
-        /*
-        breakable {
-          for (pile <- playerLayout) {
-            //pile has card that can be played
-            if (validCards.contains(pile.top()._1)) {
-              val cardSubmit: Card = pile.getCard()
-              dealer ! SendCard(cardSubmit, buildLayoutString(playerLayout))
-              playerLimbo = true
-              pileIndex = playerLayout.indexOf(pile)
-              //println(playerToString(self) + " sent " + cardToString(cardSubmit) + " to dealer.")
-              log.debug(s"{} sent {} to dealer.", playerToString(self), cardToString(cardSubmit))
-              break
-            }
-            else pilesWithNoCardToPlay += 1
-          }
-
-          if (pilesWithNoCardToPlay == 5) dealer ! PlayerStuck
-        }
-      */
       }
 
       /*else if (cardsAccepted + Player.currentLayoutSize(playerLayout) == cardsToWin){
-        log.debug(playerToString(self) + " paused: likely concurrent update error.")
+        log.debug(playerToString(self) + " paused: concurrent update error?")
         Thread.sleep(1250)
       }
       */

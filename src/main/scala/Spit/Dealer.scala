@@ -53,8 +53,8 @@ class Dealer extends Actor with ActorLogging {
   Initialisation
    */
   //create players
-  val playerOne: ActorRef = context.actorOf(Props[Player].withDispatcher("prio-dispatcher"), name = "PlayerOne")
-  val playerTwo: ActorRef = context.actorOf(Props[Player].withMailbox("prio-dispatcher"), name = "PlayerTwo")
+  val playerOne: ActorRef = context.actorOf(Props[Player].withDispatcher("play-dispatcher"), name = "PlayerOne")
+  val playerTwo: ActorRef = context.actorOf(Props[Player].withDispatcher("play-dispatcher"), name = "PlayerTwo")
 
   //create list of players and deck
   val players = List(playerOne, playerTwo)

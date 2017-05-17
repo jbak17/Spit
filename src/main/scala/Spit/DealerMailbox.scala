@@ -10,7 +10,7 @@ import akka.dispatch.UnboundedStablePriorityMailbox
 /**
   * Created by jeva on 17/05/17.
   */
-class SpitMailbox (settings: ActorSystem.Settings, config: Config) extends UnboundedStablePriorityMailbox(
+class DealerMailbox(settings: ActorSystem.Settings, config: Config) extends UnboundedStablePriorityMailbox(
 
     //lower priority means treated first
     PriorityGenerator {
@@ -26,4 +26,6 @@ class SpitMailbox (settings: ActorSystem.Settings, config: Config) extends Unbou
     }
 
   )
+
+
 
