@@ -26,23 +26,26 @@ object spit extends App{
   Player to deal with
    */
   case object AcceptCard //dealer accepts
-  case class RejectCard(card: Card) //dealer rejects
+  case class RejectCard(card: (Int, String), currentLayout: List[(Int, String)])
+
+  //dealer rejects
   case class Table(deck: Deck) //current cards facing on table
   case object CurrentLayoutRequest //send string repr to dealer
   case object RequestCard //used by dealer to break deadlock/start hand
   case object BuildLayout //used to start hand.
   case object Handover //used at end of hand, player to await instructions
   case object DealerBusy //used to make player wait for a moment
+  case object EndOfStream //end of card stream
 
   /*
   Dealer to manage
    */
   case object Endgame //player declares non-full layout
   case class CurrentLayoutResponse(layout: String) //player shows layout to dealer
-  case object Sync //player to request table, prevent player being unaware of layout.
   case object PlayerStuck //player with no card to play.
   case object DealCards //used to start game.
   case object DeclaresVictory
+  case class ResponseCard(card: Card)
   /*
   returns the string representation of a card in form
   "facevalue suit" without a space, eg. A clubs = AC

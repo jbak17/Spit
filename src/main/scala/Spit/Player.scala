@@ -83,7 +83,7 @@ class Player extends Actor  with ActorLogging {
   var currentCards: List[Card] = List.empty
 
   //flag that player is waiting on dealer to accept card
-  var playerLimbo: Boolean = false
+  var playerLimbo: Boolean = true
   var pileIndex: Int = 0 //in case card is rejected we know which pile to replace
 
   def buildDeckString(): String = playerToString(self) + " has " + playerStack.size + " in their deck\n"
@@ -135,6 +135,29 @@ class Player extends Actor  with ActorLogging {
     oldLayout
   }
 
+  def playCard(): Unit = {
+    //get list of valid card numbers
+    val validCards: List[Int] = Player.playableCards(currentCards)
+
+    //contains card
+    if (playerLayout.filter(cp => validCards.contains(cp.top()._1)).nonEmpty){
+      val pile: CardPile = playerLayout.filter(cp => validCards.contains(cp.top()._1)).head
+      pileIndex = playerLayout.indexOf(pile)
+      dealer ! SendCard(playerLayout.filter(cp => validCards.contains(cp.top()._1)).head.getCard(), buildLayoutString(playerLayout))
+      playerLimbo = true
+    } else
+      {
+        Thread.sleep(500)
+        dealer ! PlayerStuck
+      }
+
+    if (cardsAccepted + Player.currentLayoutSize(playerLayout) == cardsToWin){
+      log.debug(playerToString(self) + " paused: concurrent update error?")
+      Thread.sleep(1000)
+    }
+
+  }
+
   def printStartStatus(): Unit = {
     print(buildLayoutString(playerLayout))
     print(buildDeckString())
@@ -146,8 +169,10 @@ class Player extends Actor  with ActorLogging {
     Dealer sending card to player.
      */
     case SendCard(card, str) => {
-      playerStack = card :: playerStack
-      log.debug(playerToString(self) + " received {}", cardToString(card))
+      if (card != Player.emptyCard) {
+        playerStack = card :: playerStack
+        log.debug(playerToString(self) + " received {}", cardToString(card))
+      }
     }
 
     /*
@@ -175,21 +200,23 @@ class Player extends Actor  with ActorLogging {
     //dealer accepts
     case AcceptCard => {
       cardsAccepted += 1
-      playerLimbo = false
+      synchronized(playerLimbo = false)
       //check for empty piles and balance
-      playerLayout = balanceLayout(playerLayout)
+      playerLayout = if (!Player.isLayoutBalanced(playerLayout)) balanceLayout(playerLayout) else playerLayout
       log.debug(playerToString(self) + "player active")
-      println(buildLayoutString(playerLayout))
+      //println(buildLayoutString(playerLayout))
       if (cardsAccepted == cardsToWin) {
         dealer ! DeclaresVictory
       }
     }
 
     //dealer rejects
-    case RejectCard(card) => {
+    case RejectCard(card, tableCards) => {
       synchronized(playerLimbo = false)
       playerLayout(pileIndex).sendCard(card)
-      dealer ! Sync
+      currentCards = tableCards
+      Thread.sleep(500)
+      playCard()
       log.debug(playerToString(self) + "player active")
       log.debug(playerToString(self) + "sent sync request")
     }
@@ -198,23 +225,8 @@ class Player extends Actor  with ActorLogging {
     case Table(deck) => {
       //update cards
       currentCards = deck
-      //get list of valid card numbers
-      if (!playerLimbo) {
-        val validCards: List[Int] = Player.playableCards(deck)
-
-        //contains card
-        if (playerLayout.filter(cp => validCards.contains(cp.top()._1)).nonEmpty){
-          val pile: CardPile = playerLayout.filter(cp => validCards.contains(cp.top()._1)).head
-          pileIndex = playerLayout.indexOf(pile)
-          dealer ! SendCard(playerLayout.filter(cp => validCards.contains(cp.top()._1)).head.getCard(), buildLayoutString(playerLayout))
-        } else dealer ! PlayerStuck
-      }
-
-      /*else if (cardsAccepted + Player.currentLayoutSize(playerLayout) == cardsToWin){
-        log.debug(playerToString(self) + " paused: concurrent update error?")
-        Thread.sleep(1250)
-      }
-      */
+      Thread.sleep(200)
+      if (!playerLimbo) playCard()
 
     }
 
@@ -229,13 +241,13 @@ class Player extends Actor  with ActorLogging {
     case RequestCard => {
       Thread.sleep(500)
       if (playerStack.nonEmpty) {
-        sender() ! SendCard(playerStack.head)
+        sender ! ResponseCard(playerStack.head)
         playerStack = playerStack.tail
         log.debug(s"{} sent card on request of dealer.", playerToString(self))
         playerLimbo = false
       }
       else {
-        sender() ! SendCard(Player.emptyCard)
+        sender ! ResponseCard(Player.emptyCard)
         log.debug("{} stack empty.", playerToString(self))
       }
     }
@@ -250,6 +262,8 @@ class Player extends Actor  with ActorLogging {
 
     }
 
-    case DealerBusy => {}
+    case EndOfStream => {playerLimbo = false}
+
+
   }
 }

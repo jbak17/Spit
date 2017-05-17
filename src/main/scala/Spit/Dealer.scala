@@ -2,7 +2,7 @@ package Spit
 
 import java.util.NoSuchElementException
 
-import Spit.spit._
+import Spit.spit.{RequestCard, _}
 import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, ActorSelection, ActorSystem, Props}
 import akka.dispatch.PriorityGenerator
 import akka.event.LoggingReceive
@@ -66,6 +66,7 @@ class Dealer extends Actor with ActorLogging {
   var pileTwo: Deck = List()
 
   var playersStuck: Int = 0 //used to ensure that the game doesn't deadlock
+  var emptyDecks: Int = 0 //used when players have an empty deck
   var noPlayersResponded: Int = -1 //used to ensure that both players submit card after deadlock
   var stringCache: List[String] = List() //used to cache layout responses for pretty printing
 
@@ -88,7 +89,7 @@ class Dealer extends Actor with ActorLogging {
     //activates var: used to check if everyone has responded
     log.debug("Dealer requests layout cards")
     noPlayersResponded = 0
-    for (p <- players) p ! RequestCard
+    players.foreach(p => p ! RequestCard)
   }
 
   //Prints each element of cache and clears cache
@@ -107,7 +108,7 @@ class Dealer extends Actor with ActorLogging {
 
     stringCache = DealerLayout() :: stringCache
     for(i <- players) {
-      i ! CurrentLayoutRequest //get strings of layouts from players
+      //i ! CurrentLayoutRequest //get strings of layouts from players
       Thread.sleep(200)
       i ! Table(List(pileOne.head, pileTwo.head))
     }
@@ -139,6 +140,7 @@ class Dealer extends Actor with ActorLogging {
       println("INITIAL DEAL")
       playerOne ! Dealer.deal(initialDeck.take(26), playerOne)
       playerTwo ! Dealer.deal(initialDeck.takeRight(26), playerTwo)
+      players.foreach(p => p ! EndOfStream)
       println(initialDeck.take(26).foldLeft("Player 1 \nAs ")(_ + cardToString(_) + " "))
       println(initialDeck.takeRight(26).foldLeft("Player 2 \nAs ")(_ + cardToString(_) + " "))
       Thread.sleep(100)
@@ -148,34 +150,41 @@ class Dealer extends Actor with ActorLogging {
 
     }
 
-    case Sync => {
-      if (pileOne.nonEmpty & pileTwo.nonEmpty) {
-        sender() ! Table(List(pileOne.head, pileTwo.head))
-        log.debug("Dealer sent Table to {}", playerToString(sender()))
+    /*
+    In case of deadlock:
+    Add card from player to central piles. Doesn't proceed until both players have
+    responded. Once players have responded game continues.
+    */
+    case ResponseCard(card) => {
+      //dealer requested card to break deadlock
+      if (noPlayersResponded == 0) {
+        log.debug("1. {} sent {} on request of dealer", playerToString(sender()), cardToString(card))
+        noPlayersResponded = 1
+        //empty card
+        if (card._1 != 0) pileOne = card :: pileOne
+        Thread.sleep(250)
       }
-      else {
-        Thread.sleep(100)
-        if (pileOne.nonEmpty & pileTwo.nonEmpty) sender() ! Table(List(pileOne.head, pileTwo.head))
-        else {
-          sender() ! DealerBusy
-          log.debug("Dealer busy")
-        }
+      else if (noPlayersResponded == 1) {
+        log.debug("2. {} sent {} on request of dealer", playerToString(sender()), cardToString(card))
+        noPlayersResponded = 0 //reset to normal gamestate
+        if (card._1 != 0) pileTwo = card :: pileTwo
+        Thread.sleep(500)
+        resumeGame()
       }
+      if (card._1 == 0) println(s"${playerToString(sender)} deck empty")
+      else println(s"${playerToString(sender)} turns over ${cardToString(card)}")
+
     }
 
     /*
-                    **Players send card to dealer**
-     In case of deadlock:
-    Add card from player to central piles. Doesn't proceed until both players have
-    responded. Once players have responded game continues.
-
+            **Players send card to dealer**
     In gameplay:
       Add to pile which is valid for card. Reject if not valid. Dealer must send player a response
       otherwise player will not proceed further.
      */
     case SendCard(card, layoutString) => {
       //normal gameplay
-      if (noPlayersResponded == -1) {
+
         //check validity
         val valid: List[Int] = cardToValidNumber(card)
         //accept or reject
@@ -186,6 +195,8 @@ class Dealer extends Actor with ActorLogging {
           sender ! AcceptCard
           //Player 1, Qc to discard 1. Layout: 4c Ac 6h.. 7s... 3c....
           println(s"${playerToString(sender)}, ${cardToString(card)} to discard 1. ${layoutString}")
+          println(DealerLayout())
+          Thread.sleep(500)
           resumeGame()
         }
         else if (valid.contains(pileTwo.head._1)) {
@@ -194,32 +205,15 @@ class Dealer extends Actor with ActorLogging {
           pileTwo = card :: pileTwo
           sender ! AcceptCard
           println(s"${playerToString(sender)}, ${cardToString(card)} to discard 2. ${layoutString}")
+          println(DealerLayout())
+          Thread.sleep(500)
           resumeGame()
         }
         else {
-          sender ! RejectCard(card)
+          sender ! RejectCard(card, List(pileOne.head, pileTwo.head))
           log.debug("Dealer rejected card {}", cardToString(card))
         }
 
-      }
-      //dealer requested card to break deadlock
-      else {
-        if (noPlayersResponded == 0) {
-          log.debug("1. {} sent {} on request of dealer", playerToString(sender()), cardToString(card))
-          noPlayersResponded = 1
-          //empty card
-          if (card._1 != 0) pileOne = card :: pileOne
-        }
-        else if (noPlayersResponded == 1) {
-          log.debug("2. {} sent {} on request of dealer", playerToString(sender()), cardToString(card))
-          noPlayersResponded = -1 //reset to normal gamestate
-          if (card._1 != 0) pileTwo = card :: pileTwo
-          resumeGame()
-        }
-        if (card._1 ==0) println(s"${playerToString(sender())} deck empty")
-        else println(s"${playerToString(sender())} turns over ${cardToString(card)}")
-
-      }
     }
 
     /*
@@ -238,6 +232,7 @@ class Dealer extends Actor with ActorLogging {
       synchronized {
         log.debug("{} stuck", playerToString(sender()))
         playersStuck += 1
+        Thread.sleep(500)
         if (playersStuck == 2){
           requestLayoutCards()
           playersStuck = 0
@@ -255,6 +250,7 @@ class Dealer extends Actor with ActorLogging {
       //normal gameplay
       if (!endGame) {
         log.debug(playerToString(sender()) + " slaps and wins round!!")
+        emptyDecks = 0
 
         for (p <- players) p ! Handover //tells players to stop what they're doing
 
@@ -306,6 +302,15 @@ class Dealer extends Actor with ActorLogging {
       //Resume game
       Thread.sleep(1000)
       resumeGame()
+    }
+
+    case EndOfStream => {
+      emptyDecks += 1
+      if (emptyDecks == 2) {
+        pileOne = scala.util.Random.shuffle(pileOne)
+        pileTwo = scala.util.Random.shuffle(pileTwo)
+        resumeGame()
+      }
     }
 
 

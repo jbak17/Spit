@@ -19,9 +19,6 @@ class DealerMailbox(settings: ActorSystem.Settings, config: Config) extends Unbo
       case SendCard =>5
       case Handover => 1
       case Endgame => 4
-
-      case AcceptCard => 8
-      case RejectCard => 8
       case _ => 20
     }
 
