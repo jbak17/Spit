@@ -5,6 +5,7 @@ import java.util.NoSuchElementException
 
 import Spit.spit._
 import akka.actor.{Actor, ActorLogging}
+import akka.event.LoggingReceive
 
 import util.control.Breaks._
 import scala.util.Random.shuffle
@@ -139,7 +140,7 @@ class Player extends Actor  with ActorLogging {
     print(buildDeckString())
   }
 
-  def receive = {
+  def receive = LoggingReceive {
 
     /*
     Dealer sending card to player.
@@ -200,8 +201,16 @@ class Player extends Actor  with ActorLogging {
         val validCards: List[Int] = Player.playableCards(deck)
 
         //New hand so reset counter
-        pilesWithNoCardToPlay = 0
+        //pilesWithNoCardToPlay = 0
 
+        //contains card
+        if (playerLayout.filter(cp => validCards.contains(cp.top()._1)).nonEmpty){
+          val pile: CardPile = playerLayout.filter(cp => validCards.contains(cp.top()._1)).head
+          pileIndex = playerLayout.indexOf(pile)
+          dealer ! SendCard(playerLayout.filter(cp => validCards.contains(cp.top()._1)).head.getCard(), buildLayoutString(playerLayout))
+        } else dealer ! PlayerStuck
+
+        /*
         breakable {
           for (pile <- playerLayout) {
             //pile has card that can be played
@@ -219,13 +228,14 @@ class Player extends Actor  with ActorLogging {
 
           if (pilesWithNoCardToPlay == 5) dealer ! PlayerStuck
         }
-
+      */
       }
-      else if (cardsAccepted + Player.currentLayoutSize(playerLayout) == cardsToWin){
+
+      /*else if (cardsAccepted + Player.currentLayoutSize(playerLayout) == cardsToWin){
         log.debug(playerToString(self) + " paused: likely concurrent update error.")
         Thread.sleep(1250)
       }
-
+      */
 
     }
 

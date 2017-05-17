@@ -5,6 +5,7 @@ import java.util.NoSuchElementException
 import Spit.spit._
 import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, ActorSelection, ActorSystem, Props}
 import akka.dispatch.PriorityGenerator
+import akka.event.LoggingReceive
 import com.typesafe.config.Config
 
 import scala.annotation.tailrec
@@ -128,7 +129,7 @@ class Dealer extends Actor with ActorLogging {
 
    */
 
-  def receive = {
+  def receive = LoggingReceive {
 
     /*
     Sends cards to children, children send card back for initial pile
@@ -257,8 +258,12 @@ class Dealer extends Actor with ActorLogging {
 
         for (p <- players) p ! Handover //tells players to stop what they're doing
 
-        val shortpile: List[Card] = if (pileOne.length < pileTwo.length) pileOne else pileTwo
-        val longpile: List[Card] = if (pileOne.length > pileTwo.length) pileOne else pileTwo
+        val short: List[Card] = if (pileOne.length <= pileTwo.length) pileOne else pileTwo
+        val long: List[Card] = if (pileOne.length > pileTwo.length) pileOne else pileTwo
+
+        //shuffle cards
+        val shortpile: List[Card] = scala.util.Random.shuffle(short)
+        val longpile: List[Card] = scala.util.Random.shuffle(long)
 
         val winner: ActorRef = sender
         val loser: ActorRef = if (sender == playerOne) playerTwo else playerOne

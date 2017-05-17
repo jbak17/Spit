@@ -1,4 +1,13 @@
-Gameplay: how is this going to work? 
+Describe, in a document, your design strategy for the game. What are your Actors going to be? How are you going to resolve the race aspects of the game, such as whose hand slaps the deck first?
+
+Project:
+An implementation of the card game Spit using Scala and Akka.
+
+Summary:
+Spit is a two-player card game based on the speed of the players. To model this game, we are going to two kinds of actors: a dealer and a player.
+
+The
+Gameplay: how is this going to work?
 
 Set up:
 	DealCards: 

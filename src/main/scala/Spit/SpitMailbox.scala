@@ -14,10 +14,12 @@ class SpitMailbox (settings: ActorSystem.Settings, config: Config) extends Unbou
 
     //lower priority means treated first
     PriorityGenerator {
-      case Handover => 0
-      case DeclaresVictory => 2
+      case DeclaresVictory => 0
+
+      case SendCard =>5
+      case Handover => 1
       case Endgame => 4
-      case SendCard =>6
+
       case AcceptCard => 8
       case RejectCard => 8
       case _ => 20
