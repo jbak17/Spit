@@ -3,7 +3,9 @@ package Spit
 import java.util.NoSuchElementException
 
 import Spit.spit._
-import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, ActorSelection, Props}
+import akka.actor.{Actor, ActorLogging, ActorPath, ActorRef, ActorSelection, ActorSystem, Props}
+import akka.dispatch.PriorityGenerator
+import com.typesafe.config.Config
 
 import scala.annotation.tailrec
 
@@ -35,9 +37,10 @@ object Dealer {
     if (cards.tail.nonEmpty) player ! SendCard(cards.head)
     else {
       player ! SendCard(cards.head)
+      Thread.sleep(500)
       player ! BuildLayout
     }
-
+    //recursive call
     if (cards.tail.nonEmpty) deal(cards.tail, player)
   }
 }
@@ -49,8 +52,8 @@ class Dealer extends Actor with ActorLogging {
   Initialisation
    */
   //create players
-  val playerOne: ActorRef = context.actorOf(Props[Player], name = "PlayerOne")
-  val playerTwo: ActorRef = context.actorOf(Props[Player], name = "PlayerTwo")
+  val playerOne: ActorRef = context.actorOf(Props[Player].withDispatcher("prio-dispatcher"), name = "PlayerOne")
+  val playerTwo: ActorRef = context.actorOf(Props[Player].withMailbox("prio-dispatcher"), name = "PlayerTwo")
 
   //create list of players and deck
   val players = List(playerOne, playerTwo)
@@ -212,7 +215,8 @@ class Dealer extends Actor with ActorLogging {
           if (card._1 != 0) pileTwo = card :: pileTwo
           resumeGame()
         }
-        println(s"${playerToString(sender())} turns over ${cardToString(card)}")
+        if (card._1 ==0) println(s"${playerToString(sender())} deck empty")
+        else println(s"${playerToString(sender())} turns over ${cardToString(card)}")
 
       }
     }
@@ -249,7 +253,7 @@ class Dealer extends Actor with ActorLogging {
 
       //normal gameplay
       if (!endGame) {
-        log.debug(playerToString(sender()) + " declares Victory!!")
+        log.debug(playerToString(sender()) + " slaps and wins round!!")
 
         for (p <- players) p ! Handover //tells players to stop what they're doing
 
@@ -275,19 +279,23 @@ class Dealer extends Actor with ActorLogging {
           log.debug("Players sent new cards")
         } catch {
           case el: NoSuchElementException => {
-            Thread.sleep(200)
+            Thread.sleep(800)
             Dealer.deal(shortpile.tail, winner) //short stack to winner
             Dealer.deal(longpile.tail, loser) //long stack to loser
             log.debug("Players sent new cards")
           }
         }
+        //print cards returned to players from piles.
+        println(playerToString(winner))
+        println(shortpile.foldLeft("As ")(_ + cardToString(_) + " "))
+        println(playerToString(loser))
+        println(longpile.foldLeft("As ")(_ + cardToString(_) + " "))
+
       }
       else {
         println(s"${playerToString(sender)} out! Slaps! Wins!")
         context.system.terminate()
       }
-
-
 
 
       //Resume game
@@ -298,5 +306,21 @@ class Dealer extends Actor with ActorLogging {
 
   }
 }
+
+import akka.dispatch.UnboundedStablePriorityMailbox
+
+/**
+  * Created by jeva on 17/05/17.
+  */
+class SpitMailbox (settings: ActorSystem.Settings, config: Config) extends UnboundedStablePriorityMailbox(
+  //lower priority means treated first
+  PriorityGenerator {
+    case Handover => 0
+    case DeclaresVictory => 1
+    case _ => 20
+  }
+
+)
+
 
 

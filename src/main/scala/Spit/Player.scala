@@ -117,6 +117,11 @@ class Player extends Actor  with ActorLogging {
     else currentLayout
   }
 
+  def printStartStatus(): Unit = {
+    print(buildLayoutString(playerLayout))
+    print(buildDeckString())
+  }
+
   def receive = {
 
     /*
@@ -136,6 +141,7 @@ class Player extends Actor  with ActorLogging {
       if (playerStack.size > 15) {
         playerLayout = Player.buildLayout(playerStack.take(15))
         playerStack = playerStack.drop(15)
+
       }
       else {
         playerLayout = Player.buildLayout(playerStack)
@@ -143,6 +149,7 @@ class Player extends Actor  with ActorLogging {
         dealer ! Endgame
         log.debug(playerToString(self) + " has entered endgame")
       }
+      printStartStatus()
 
     }
 

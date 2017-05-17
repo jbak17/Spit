@@ -1,6 +1,9 @@
 package Spit
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.dispatch.PriorityGenerator
+import akka.dispatch.UnboundedStablePriorityMailbox
+import com.typesafe.config.{Config, ConfigFactory}
 
 /**
   * Created by jeva on 17/04/17.
@@ -78,11 +81,13 @@ object spit extends App{
     Thread.sleep(500)
   }
 
-   //     ACTOR SYSTEM SETUP
 
-  val system = ActorSystem("Spit_System")
+   //     ACTOR SYSTEM SETUP
+  import akka.dispatch._
+
+  val system = ActorSystem("Spit_System", ConfigFactory.load)
   //create dealer
-  val dealer = system.actorOf(Props[Dealer],"Dealer")
+  val dealer = system.actorOf(Props[Dealer].withDispatcher("prio-dispatcher"),"Dealer")
   initialiseGame()
 
 
