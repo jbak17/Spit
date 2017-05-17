@@ -67,7 +67,7 @@ class Dealer extends Actor with ActorLogging {
 
   var victoryDeclared: Boolean = false //used to ensure dealer doesn't reset game twice.
 
-  var endGame: Int = 0 // 0 normal, 1 playerOne, 2 playerTwo
+  var endGame: Boolean = false // set when one player has a deck at beginning of hand <15
 
   /* ******************
     DEALER FUNCTIONS
@@ -177,7 +177,7 @@ class Dealer extends Actor with ActorLogging {
         //accept or reject
         if (valid.contains(pileOne.head._1)) {
           log.debug("Dealer accepted card {}", cardToString(card))
-          println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
+          //println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
           pileOne = card :: pileOne
           sender ! AcceptCard
           //Player 1, Qc to discard 1. Layout: 4c Ac 6h.. 7s... 3c....
@@ -186,7 +186,7 @@ class Dealer extends Actor with ActorLogging {
         }
         else if (valid.contains(pileTwo.head._1)) {
           log.debug("Dealer accepted card {}", cardToString(card))
-          println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
+          //println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
           pileTwo = card :: pileTwo
           sender ! AcceptCard
           println(s"${playerToString(sender)}, ${cardToString(card)} to discard 2. ${layoutString}")
@@ -220,8 +220,7 @@ class Dealer extends Actor with ActorLogging {
     /*
     Set endgame flag to appropriate player.
      */
-    case Endgame => if (sender == playerOne) endGame = 1 else endGame = 2
-
+    case Endgame => endGame = true
 
     case CurrentLayoutResponse(response) => {
       stringCache = response :: stringCache
@@ -233,7 +232,6 @@ class Dealer extends Actor with ActorLogging {
     case PlayerStuck => {
       synchronized {
         log.debug("{} stuck", playerToString(sender()))
-        println(playerToString(sender()) + " stuck.")
         playersStuck += 1
         if (playersStuck == 2){
           requestLayoutCards()
@@ -250,9 +248,7 @@ class Dealer extends Actor with ActorLogging {
     case DeclaresVictory => {
 
       //normal gameplay
-      if (endGame == 0) {
-
-        println(playerToString(sender()) + " declares Victory!!")
+      if (!endGame) {
         log.debug(playerToString(sender()) + " declares Victory!!")
 
         for (p <- players) p ! Handover //tells players to stop what they're doing
@@ -286,8 +282,10 @@ class Dealer extends Actor with ActorLogging {
           }
         }
       }
-      else if (endGame == 1) {gameOver(1)}
-      else {gameOver(2)}
+      else {
+        println(s"${playerToString(sender)} out! Slaps! Wins!")
+        context.system.terminate()
+      }
 
 
 
