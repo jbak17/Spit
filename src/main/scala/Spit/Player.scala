@@ -59,7 +59,7 @@ class Player extends Actor  with ActorLogging {
   var playerStack: Deck = List()
   var playerLayout: List[CardPile] = List()
 
-  val cardsToWin = 15
+  var cardsToWin = 15
 
   //number of cards accepted by dealer
   var cardsAccepted: Int = 0
@@ -71,7 +71,7 @@ class Player extends Actor  with ActorLogging {
   var playerLimbo: Boolean = false
   var pileIndex: Int = 0 //in case card is rejected we know which pile to replace
 
-  def buildDeckString(): String = playerToString(self) + " has " + playerStack.size + " in their deck"
+  def buildDeckString(): String = playerToString(self) + " has " + playerStack.size + " in their deck\n"
   def buildLayoutString(layout: Layout): String = {
     var pileStatus: List[(Card, Int, Int)] = List()
     for (pile <- layout) {
@@ -145,8 +145,9 @@ class Player extends Actor  with ActorLogging {
       }
       else {
         playerLayout = Player.buildLayout(playerStack)
-        playerStack = List()
+        playerStack = List.empty
         dealer ! Endgame
+        cardsToWin = playerLayout.size
         log.debug(playerToString(self) + " has entered endgame")
       }
       printStartStatus()

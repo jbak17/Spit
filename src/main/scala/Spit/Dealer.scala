@@ -307,20 +307,7 @@ class Dealer extends Actor with ActorLogging {
   }
 }
 
-import akka.dispatch.UnboundedStablePriorityMailbox
 
-/**
-  * Created by jeva on 17/05/17.
-  */
-class SpitMailbox (settings: ActorSystem.Settings, config: Config) extends UnboundedStablePriorityMailbox(
-  //lower priority means treated first
-  PriorityGenerator {
-    case Handover => 0
-    case DeclaresVictory => 1
-    case _ => 20
-  }
-
-)
 
 
 
