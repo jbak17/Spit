@@ -17,7 +17,7 @@ object Dealer {
 
   //creates a shuffled deck of 52 playing cards
   def createDeck(): Deck = {
-    val suits: List[String] = List("H", "S", "C", "D")
+    val suits: List[String] = List("h", "s", "c", "d")
     val deck: Deck = for (
       suit <- suits;
       number <- 1 to 13
@@ -121,9 +121,11 @@ class Dealer extends Actor with ActorLogging {
     Used to start game
      */
     case DealCards => {
-      println("Dealing...")
+      println("INITIAL DEAL")
       playerOne ! Dealer.deal(initialDeck.take(26), playerOne)
       playerTwo ! Dealer.deal(initialDeck.takeRight(26), playerTwo)
+      println(initialDeck.take(26).foldLeft("Player 1 \nAs ")(_ + cardToString(_) + " "))
+      println(initialDeck.takeRight(26).foldLeft("Player 2 \nAs ")(_ + cardToString(_) + " "))
       Thread.sleep(100)
       //get cards from players for the layout
       requestLayoutCards()
@@ -156,7 +158,7 @@ class Dealer extends Actor with ActorLogging {
       Add to pile which is valid for card. Reject if not valid. Dealer must send player a response
       otherwise player will not proceed further.
      */
-    case SendCard(card) => {
+    case SendCard(card, layoutString) => {
       //normal gameplay
       if (noPlayersResponded == -1) {
         //check validity
@@ -167,6 +169,8 @@ class Dealer extends Actor with ActorLogging {
           println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
           pileOne = card :: pileOne
           sender ! AcceptCard
+          //Player 1, Qc to discard 1. Layout: 4c Ac 6h.. 7s... 3c....
+          println(s"${playerToString(sender)}, ${cardToString(card)} to discard 1. ${layoutString}")
           resumeGame()
         }
         else if (valid.contains(pileTwo.head._1)) {
@@ -174,6 +178,7 @@ class Dealer extends Actor with ActorLogging {
           println("Dealer accepted " + cardToString(card) + " from " + playerToString(sender()))
           pileTwo = card :: pileTwo
           sender ! AcceptCard
+          println(s"${playerToString(sender)}, ${cardToString(card)} to discard 2. ${layoutString}")
           resumeGame()
         }
         else {
@@ -196,6 +201,8 @@ class Dealer extends Actor with ActorLogging {
           if (card._1 != 0) pileTwo = card :: pileTwo
           resumeGame()
         }
+        println(s"${playerToString(sender())} turns over ${cardToString(card)}")
+
       }
     }
 
@@ -226,8 +233,6 @@ class Dealer extends Actor with ActorLogging {
     some way of rewarding victory.
      */
     case DeclaresVictory => {
-      println(playerToString(sender()) + " declares Victory!!")
-      log.debug(playerToString(sender()) + " declares Victory!!")
 
       for (p <- players) p ! Handover //tells players to stop what they're doing
 
@@ -237,6 +242,11 @@ class Dealer extends Actor with ActorLogging {
 
       val winner: ActorRef = sender()
       val loser: ActorRef = if (sender() == playerOne) playerTwo else playerOne
+
+      val pileStr: Int = if (pileOne.length < pileTwo.length) 1 else 2
+
+      println(s"${playerToString(sender)} out! Slaps hand on discard pile ${pileStr}")
+      log.debug(playerToString(sender()) + " declares Victory!!")
 
       //send cards to players
       //reset dealer piles.

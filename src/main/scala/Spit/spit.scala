@@ -17,7 +17,7 @@ object spit extends App{
   /*
     All actors to recieve
   */
-  case class SendCard(card: Card)
+  case class SendCard(card: Card, layout: String = "")
 
   /*
   Player to deal with
@@ -50,7 +50,7 @@ object spit extends App{
     case (12, _) => "Q" + card._2
     case (13, _) => "K" + card._2
     case (1, _) => "A" + card._2
-    case (0, _) => "X" //empty card for layout display.
+    case (0, _) => "_" //empty card for layout display.
     case (_, _) => card._1.toString + card._2
   }
 

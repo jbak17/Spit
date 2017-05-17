@@ -6,7 +6,7 @@ import Spit.spit.{Card, Deck}
   * Created by jeva on 14/05/17.
   */
 class CardPile(max_size: Int) {
-  val emptyCard: Card = (0, "X")
+  val emptyCard: Card = (0, "_")
   val max: Int = max_size
   var cards: List[Card] = List()
 

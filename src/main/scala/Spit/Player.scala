@@ -13,7 +13,7 @@ Players communicate with the dealer and cardpiles
  */
 object Player {
 
-  val emptyCard: Card = (0, "X") //used to signal empty stack
+  val emptyCard: Card = (0, "_") //used to signal empty stack
 
   final def buildLayout(deck: Deck): List[CardPile] = {
 
@@ -70,9 +70,10 @@ class Player extends Actor  with ActorLogging {
   var playerLimbo: Boolean = false
   var pileIndex: Int = 0 //in case card is rejected we know which pile to replace
 
-  def buildLayoutString(): String = {
+  def buildDeckString(): String = playerToString(self) + " has " + playerStack.size + " in their deck"
+  def buildLayoutString(layout: Layout): String = {
     var pileStatus: List[(Card, Int, Int)] = List()
-    for (pile <- playerLayout) {
+    for (pile <- layout) {
       pileStatus = pile.status() :: pileStatus
     }
     pileStatus.sortWith(_._3 < _._3)
@@ -81,7 +82,8 @@ class Player extends Actor  with ActorLogging {
     for (p <- pileStatus) {
       outString = (cardToString(p._1) + "." * p._2 + " ") :: outString
     }
-    playerToString(self) + "'s layout: " + outString.foldLeft("")(_ + _)
+    playerToString(self) + " layout: " + outString.foldLeft("")(_ + _)
+
   }
 
 
@@ -106,6 +108,8 @@ class Player extends Actor  with ActorLogging {
         val highIndex: Int = oldLayout.map(CP => (oldLayout.indexOf(CP), CP.size())).sortWith(_._2 > _._2).head._1 //get highest index
         val swapCard: Card = oldLayout(highIndex).getCard() //card from highest pile
         oldLayout(emptyIndex).sendCard(swapCard) //add card to empty pile
+        //Player 1, 7s to empty stack. Layout: 7s Ac 6h.. Qd.. 3c....
+        println(s"${playerToString(self)}, ${cardToString(swapCard)} to empty stack. ${buildLayoutString(oldLayout)}" )
       }
       oldLayout
     }
@@ -117,7 +121,7 @@ class Player extends Actor  with ActorLogging {
     /*
     Dealer sending card to player.
      */
-    case SendCard(card) => {
+    case SendCard(card, str) => {
       playerStack = card :: playerStack
       log.debug(playerToString(self) + " received {}", cardToString(card))
     }
@@ -151,7 +155,7 @@ class Player extends Actor  with ActorLogging {
       //check for empty piles and balance
       playerLayout = balanceLayout(playerLayout)
       log.debug(playerToString(self) + "player active")
-      println(buildLayoutString())
+      println(buildLayoutString(playerLayout))
       if (cardsAccepted == cardsToWin) {
         dealer ! DeclaresVictory
       }
@@ -180,7 +184,7 @@ class Player extends Actor  with ActorLogging {
             //pile has card that can be played
             if (validCards.contains(pile.top()._1)) {
               val cardSubmit: Card = pile.getCard()
-              dealer ! SendCard(cardSubmit)
+              dealer ! SendCard(cardSubmit, buildLayoutString(playerLayout))
               playerLimbo = true
               pileIndex = playerLayout.indexOf(pile)
               //println(playerToString(self) + " sent " + cardToString(cardSubmit) + " to dealer.")
@@ -203,7 +207,7 @@ class Player extends Actor  with ActorLogging {
     //send string repr to dealer
     case CurrentLayoutRequest => {
 
-      dealer ! CurrentLayoutResponse(buildLayoutString())
+      dealer ! CurrentLayoutResponse(buildLayoutString(playerLayout))
 
     }
 
