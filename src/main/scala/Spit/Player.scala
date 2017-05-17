@@ -109,44 +109,6 @@ class Player extends Actor  with ActorLogging {
   def layoutCardsToStack(layout: List[CardPile]): Deck = layout.flatMap(cp => cp.returnCards())
 
   /*
-  Moves cards from full to empty stacks.
-
-  def balanceLayout(currentLayout: List[CardPile]): List[CardPile] = {
-    //check that there won't always be an empty pile -- near end of hand
-    log.debug("{} balancing layout", playerToString(self))
-
-    var oldLayout = currentLayout
-    //less than 5 cards left but more than one card in a pile
-    val crdsRemaining: Int = cardsToWin - cardsAccepted
-
-    if (!(cardsToWin - cardsAccepted <= 5)) {
-      //checks if there are empty piles
-      //repeats until no empty piles
-      while (!Player.isLayoutBalanced(oldLayout)) {
-        val emptyIndex: Int = oldLayout.indexOf(oldLayout.filter(CP => CP.isEmpty()).head) //get empty index
-        val highIndex: Int = oldLayout.map(CP => (oldLayout.indexOf(CP), CP.size())).sortWith(_._2 > _._2).head._1 //get highest index
-        val swapCard: Card = oldLayout(highIndex).getCard() //card from highest pile
-        oldLayout(emptyIndex).sendCard(swapCard) //add card to empty pile
-        //Player 1, 7s to empty stack. Layout: 7s Ac 6h.. Qd.. 3c....
-        println(s"${playerToString(self)}, ${cardToString(swapCard)} to empty stack. ${buildLayoutString(oldLayout)}" )
-      }
-      oldLayout
-    }
-    else if (crdsRemaining + Player.countEmpty(currentLayout) != 5){
-      while (crdsRemaining + Player.countEmpty(currentLayout) != 5){
-        val emptyIndex: Int = oldLayout.indexOf(oldLayout.filter(CP => CP.isEmpty()).head) //get empty index
-        val highIndex: Int = oldLayout.map(CP => (oldLayout.indexOf(CP), CP.size())).sortWith(_._2 > _._2).head._1 //get highest index
-        val swapCard: Card = oldLayout(highIndex).getCard() //card from highest pile
-        oldLayout(emptyIndex).sendCard(swapCard) //add card to empty pile
-        //Player 1, 7s to empty stack. Layout: 7s Ac 6h.. Qd.. 3c....
-        println(s"${playerToString(self)}, ${cardToString(swapCard)} to empty stack. ${buildLayoutString(oldLayout)}" )
-      }
-      oldLayout
-    }
-    else currentLayout
-  }
-*/
-  /*
  Moves cards from full to empty stacks.
   */
   def balanceLayout(currentLayout: List[CardPile]): List[CardPile] = {

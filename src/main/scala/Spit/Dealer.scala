@@ -260,8 +260,8 @@ class Dealer extends Actor with ActorLogging {
         val shortpile: List[Card] = if (pileOne.length < pileTwo.length) pileOne else pileTwo
         val longpile: List[Card] = if (pileOne.length > pileTwo.length) pileOne else pileTwo
 
-        val winner: ActorRef = sender()
-        val loser: ActorRef = if (sender() == playerOne) playerTwo else playerOne
+        val winner: ActorRef = sender
+        val loser: ActorRef = if (sender == playerOne) playerTwo else playerOne
 
         val pileStr: Int = if (pileOne.length < pileTwo.length) 1 else 2
 
